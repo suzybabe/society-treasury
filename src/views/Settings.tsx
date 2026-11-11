@@ -185,7 +185,7 @@ export default function Settings() {
             animate={{ y: 0 }}
             exit={{ y: 100 }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="fixed inset-x-0 bottom-0 z-40 border-t border-ink bg-paper/95 backdrop-blur"
+            className="fixed inset-x-0 bottom-[60px] z-40 border-t border-ink bg-paper/95 backdrop-blur lg:bottom-0 lg:left-64"
           >
             <div className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-sm text-ink-2">

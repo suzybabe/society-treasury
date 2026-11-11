@@ -1,6 +1,6 @@
 'use client'
 
-import { LogOut, X } from 'lucide-react'
+import { House, LogOut, ScrollText, SlidersHorizontal, Users, Vote, X, type LucideIcon } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -15,14 +15,18 @@ import { Avatar, Logo, RoleBadge } from './ui'
 interface NavItem {
   href: string
   label: string
+  icon: LucideIcon
   roles?: Role[]
+  /** A count to show next to the item, e.g. members waiting for approval. */
+  badge?: number
 }
 
 const NAV: NavItem[] = [
-  { href: '/home', label: 'Home' },
-  { href: '/spending', label: 'Spending' },
-  { href: '/committee', label: 'Committee', roles: ['president', 'treasurer', 'committee'] },
-  { href: '/settings', label: 'Settings', roles: ['president'] },
+  { href: '/home', label: 'Home', icon: House },
+  { href: '/spending', label: 'Spending', icon: ScrollText },
+  { href: '/members', label: 'Members', icon: Users },
+  { href: '/committee', label: 'Committee', icon: Vote, roles: ['president', 'treasurer', 'committee'] },
+  { href: '/settings', label: 'Settings', icon: SlidersHorizontal, roles: ['president'] },
 ]
 
 export const KIND_TAG: Record<ActivityKind, string> = {
@@ -60,15 +64,47 @@ export function Ticker() {
   )
 }
 
-function NavLinks({ items, id, active }: { items: NavItem[]; id: string; active: string | null }) {
+const PILL_SPRING = { type: 'spring', stiffness: 420, damping: 34 } as const
+
+const isActiveHref = (active: string | null, href: string) => !!active && (active === href || active.startsWith(`${href}/`))
+
+/** Sidebar links on desktop, a bottom tab bar on phones. */
+function NavLinks({ items, variant, active }: { items: NavItem[]; variant: 'side' | 'bottom'; active: string | null }) {
+  if (variant === 'side') {
+    return (
+      <nav className="flex flex-col gap-1">
+        {items.map((n) => {
+          const on = isActiveHref(active, n.href)
+          const Icon = n.icon
+          return (
+            <Link key={n.href} href={n.href} className="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium">
+              {on && <motion.span layoutId="nav-pill-side" className="absolute inset-0 rounded-lg bg-ink" transition={PILL_SPRING} />}
+              <Icon size={18} className={`relative shrink-0 transition-colors ${on ? 'text-paper' : 'text-ink-3 group-hover:text-ink'}`} />
+              <span className={`relative flex-1 transition-colors ${on ? 'text-paper' : 'text-ink-2 group-hover:text-ink'}`}>{n.label}</span>
+              {!!n.badge && (
+                <span className={`relative grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-mono text-[10.5px] font-medium ${on ? 'bg-accent text-on-accent' : 'bg-sun text-ink'}`}>
+                  {n.badge}
+                </span>
+              )}
+            </Link>
+          )
+        })}
+      </nav>
+    )
+  }
   return (
-    <nav className="flex items-center gap-1">
+    <nav className="flex items-stretch justify-around px-1">
       {items.map((n) => {
-        const isActive = !!active && (active === n.href || active.startsWith(`${n.href}/`))
+        const on = isActiveHref(active, n.href)
+        const Icon = n.icon
         return (
-          <Link key={n.href} href={n.href} className="relative rounded-full px-3.5 py-1.5 text-sm font-medium">
-            {isActive && <motion.span layoutId={`nav-pill-${id}`} className="absolute inset-0 rounded-full bg-ink" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
-            <span className={`relative transition-colors ${isActive ? 'text-paper' : 'text-ink-2 hover:text-ink'}`}>{n.label}</span>
+          <Link key={n.href} href={n.href} className="relative flex flex-1 flex-col items-center gap-1 py-2 text-[10.5px] font-medium">
+            {on && <motion.span layoutId="nav-pill-bottom" className="absolute inset-x-1.5 inset-y-1 rounded-lg bg-ink" transition={PILL_SPRING} />}
+            <span className="relative">
+              <Icon size={19} className={on ? 'text-paper' : 'text-ink-3'} />
+              {!!n.badge && <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-sun px-1 font-mono text-[9px] text-ink">{n.badge}</span>}
+            </span>
+            <span className={`relative ${on ? 'text-paper' : 'text-ink-2'}`}>{n.label}</span>
           </Link>
         )
       })}
@@ -77,11 +113,11 @@ function NavLinks({ items, id, active }: { items: NavItem[]; id: string; active:
 }
 
 /** usePathname can suspend while Next.js prerenders dynamic routes, so it lives in its own leaf. */
-function ActiveNav(props: { items: NavItem[]; id: string }) {
+function ActiveNav(props: { items: NavItem[]; variant: 'side' | 'bottom' }) {
   return <NavLinks {...props} active={usePathname()} />
 }
 
-function Nav(props: { items: NavItem[]; id: string }) {
+function Nav(props: { items: NavItem[]; variant: 'side' | 'bottom' }) {
   return (
     <Suspense fallback={<NavLinks {...props} active={null} />}>
       <ActiveNav {...props} />
@@ -123,54 +159,81 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 function SignedInShell({ children }: { children: ReactNode }) {
-  const { me, settings, logout } = useTreasury()
+  const { me, settings, payments, logout } = useTreasury()
   const router = useRouter()
-  const items = NAV.filter((n) => !n.roles || n.roles.includes(me.role))
+  const waiting = me.role === 'treasurer' || me.role === 'president' ? payments.length : 0
+  const items = NAV.filter((n) => !n.roles || n.roles.includes(me.role)).map((n) => (n.href === '/members' ? { ...n, badge: waiting } : n))
   const signOut = async () => {
     await logout()
     router.replace('/login')
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Ticker />
-      <header className="sticky top-0 z-30 border-b border-ink/12 bg-paper/85 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 px-5">
-          <div className="flex items-center gap-8">
-            <Link href="/home">
-              <Logo short={settings.shortName} />
-            </Link>
-            <div className="hidden md:block">
-              <Nav items={items} id="desk" />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="hidden text-right sm:block">
-              <div className="text-sm font-medium leading-tight">{me.name}</div>
+    <div className="min-h-screen lg:pl-64">
+      {/* Sidebar (desktop) */}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-ink/12 bg-paper lg:flex">
+        <div className="px-5 pb-5 pt-6">
+          <Link href="/home">
+            <Logo short={settings.shortName} />
+          </Link>
+        </div>
+        <div className="mx-4 rounded-md border border-ink/12 px-3 py-2.5">
+          <div className="label">Society</div>
+          <div className="mt-0.5 truncate text-sm font-medium">{settings.societyName}</div>
+          <div className="font-mono text-[11px] text-ink-3">Term {settings.term}</div>
+        </div>
+        <div className="mt-6 flex-1 overflow-y-auto px-3">
+          <Nav items={items} variant="side" />
+        </div>
+        <div className="border-t border-ink/12 p-3">
+          <div className="flex items-center gap-3 px-2 py-1.5">
+            <Avatar name={me.name} size={34} />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium leading-tight">{me.name}</div>
               <RoleBadge role={me.role} />
             </div>
-            <Avatar name={me.name} size={34} />
+          </div>
+          <div className="mt-2 flex items-center gap-2 px-2">
             <ThemeToggle />
-            <button onClick={signOut} title="Sign out" className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition hover:bg-ink hover:text-paper">
-              <LogOut size={16} />
+            <button onClick={signOut} className="btn btn-line btn-sm flex-1">
+              <LogOut size={14} /> Sign out
             </button>
           </div>
         </div>
-        <div className="-mt-1 overflow-x-auto px-4 pb-2 md:hidden">
-          <Nav items={items} id="mob" />
-        </div>
-      </header>
+      </aside>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10 sm:py-14">{children}</main>
+      <div className="flex min-h-screen flex-col">
+        <Ticker />
+        {/* Top bar (phones and tablets) */}
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-ink/12 bg-paper/85 px-4 backdrop-blur-md lg:hidden">
+          <Link href="/home">
+            <Logo short={settings.shortName} />
+          </Link>
+          <div className="flex items-center gap-2">
+            <Avatar name={me.name} size={30} />
+            <ThemeToggle />
+            <button onClick={signOut} title="Sign out" aria-label="Sign out" className="grid h-9 w-9 place-items-center rounded-full text-ink-3 transition hover:bg-ink hover:text-paper">
+              <LogOut size={16} />
+            </button>
+          </div>
+        </header>
 
-      <footer className="border-t border-ink/12">
-        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-5 py-6 font-mono text-[11px] text-ink-3 sm:flex-row sm:justify-between">
-          <span>
-            {settings.societyName} · Term {settings.term}
-          </span>
-          <span>Past records can’t be edited or deleted.</span>
-        </div>
-      </footer>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10 sm:py-14 lg:px-10">{children}</main>
+
+        <footer className="border-t border-ink/12">
+          <div className="mx-auto flex max-w-6xl flex-col gap-1 px-5 py-6 pb-24 font-mono text-[11px] text-ink-3 sm:flex-row sm:justify-between lg:px-10 lg:pb-6">
+            <span>
+              {settings.societyName} · Term {settings.term}
+            </span>
+            <span>Past records can’t be edited or deleted.</span>
+          </div>
+        </footer>
+      </div>
+
+      {/* Bottom tabs (phones and tablets) */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-ink/12 bg-paper/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
+        <Nav items={items} variant="bottom" />
+      </div>
     </div>
   )
 }
@@ -178,7 +241,7 @@ function SignedInShell({ children }: { children: ReactNode }) {
 export function Toaster() {
   const { toasts, dismissToast } = useTreasury()
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2">
+    <div className="pointer-events-none fixed bottom-20 right-4 z-50 lg:bottom-4 flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2">
       <AnimatePresence initial={false}>
         {toasts.map((t) => (
           <motion.div
