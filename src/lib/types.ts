@@ -20,6 +20,8 @@ export interface Member {
   near: string | null
   passId: number
   joinedAt: string
+  /** NEAR transaction that minted their pass, once recorded. */
+  passTx?: string
 }
 
 /** A student's latest proof-of-payment submission. */

@@ -78,6 +78,7 @@ export const toMember = (m: MemberRow): Member => ({
   near: m.nearAccountId,
   passId: m.passNumber ?? 0,
   joinedAt: (m.feeConfirmedAt ?? m.createdAt).toISOString(),
+  passTx: m.passTxHash ?? undefined,
 })
 
 export const requestRef = (id: number) => `REQ-${String(id).padStart(4, '0')}`

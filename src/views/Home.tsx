@@ -67,6 +67,7 @@ export default function Home() {
                 ['NEAR account', <span key="near" className="font-mono text-xs">{me.near}</span>],
                 ['Term', settings.term],
                 ['Issued', shortDate(me.joinedAt)],
+                ['On NEAR', me.passTx ? <TxChip key="tx" tx={me.passTx} /> : <span key="tx" className="text-xs text-ink-3">Recording…</span>],
                 [
                   'Status',
                   <span key="status" className="inline-flex items-center gap-2">
