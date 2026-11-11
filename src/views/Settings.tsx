@@ -5,7 +5,7 @@ import { useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { Reveal } from '../components/motion'
 import { Avatar, Empty, PageHeader, RoleBadge } from '../components/ui'
-import { eur, passNo } from '../lib/format'
+import { passNo } from '../lib/format'
 import { isCommittee, requiredYes } from '../lib/rules'
 import type { Role, Settings as SettingsT } from '../lib/types'
 import { useMe, useTreasury } from '../state/store'
@@ -81,9 +81,6 @@ export default function Settings() {
           <span className="font-semibold text-ink">{need} yes votes</span>. At least 2 are always needed, so nobody can approve alone.
         </p>
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Auto-approve under (€)" hint="Skips the vote. A receipt is still required.">
-            <input className="input font-mono" type="number" min={0} step={1} value={draft.autoApproveLimit} onChange={(e) => set('autoApproveLimit', Math.max(0, Number(e.target.value)))} />
-          </Field>
           <Field label="Membership fee (€)" hint="Applies to new passes only.">
             <input className="input font-mono" type="number" min={0} step={1} value={draft.membershipFee} onChange={(e) => set('membershipFee', Math.max(0, Number(e.target.value)))} />
           </Field>
@@ -189,7 +186,7 @@ export default function Settings() {
           >
             <div className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-sm text-ink-2">
-                Unsaved changes. Current rules: more than {settings.approvalPercent}%, auto-approve under {eur(settings.autoApproveLimit)}.
+                Unsaved changes. Current rule: more than {settings.approvalPercent}% of eligible votes to pass.
               </span>
               <div className="flex gap-2">
                 <button onClick={() => setDraft(settings)} className="btn btn-line btn-sm">

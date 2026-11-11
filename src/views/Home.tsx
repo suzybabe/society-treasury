@@ -197,7 +197,7 @@ export default function Home() {
 
       <Reveal className="mt-10">
         <p className="font-mono text-[11px] leading-relaxed text-ink-3">
-          Rules the treasury enforces: nobody votes on their own request · nobody approves spending alone · anything over {eur(settings.autoApproveLimit)} needs a committee vote · past records can’t be edited.
+          Rules the treasury enforces: nobody votes on their own request · nobody approves spending alone · every request needs a committee vote · past records can’t be edited.
         </p>
       </Reveal>
     </>

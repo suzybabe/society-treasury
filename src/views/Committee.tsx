@@ -9,7 +9,7 @@ import { CountUp, EASE, int, Reveal } from '../components/motion'
 import { LedgerHead, RequestRow } from '../components/RequestRow'
 import { Empty, Figure, PageHeader, Section, VoteMeter } from '../components/ui'
 import { eur, timeAgo } from '../lib/format'
-import { isCommittee, requiredYes, tally, voteBlock } from '../lib/rules'
+import { isCommittee, MIN_ELIGIBLE_VOTERS, requiredYes, tally, voteBlock } from '../lib/rules'
 import { CATEGORIES, type Category } from '../lib/types'
 import { memberById, useMe, useTreasury } from '../state/store'
 
@@ -67,10 +67,10 @@ function NewRequestForm() {
   const [busy, setBusy] = useState(false)
 
   const n = Number(amount)
-  const valid = title.trim().length > 2 && n > 0
   const eligible = members.filter((m) => isCommittee(m.role) && m.id !== me.id).length
+  const enoughVoters = eligible >= MIN_ELIGIBLE_VOTERS
+  const valid = title.trim().length > 2 && n > 0 && enoughVoters
   const need = requiredYes(eligible, settings.approvalPercent)
-  const auto = n > 0 && n < settings.autoApproveLimit
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -106,26 +106,14 @@ function NewRequestForm() {
         <textarea className="input" rows={3} placeholder="Supplier, quote, why it’s needed" value={description} onChange={(e) => setDescription(e.target.value)} />
       </label>
 
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={auto ? 'auto' : 'vote'}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.25 }}
-          className={`rounded-md p-3 text-sm ${auto ? 'bg-leaf/12 text-ink' : 'bg-ink/[0.05] text-ink-2'}`}
-        >
-          {auto ? (
-            <>
-              <span className="font-semibold text-leaf">Auto-approved.</span> It’s under {eur(settings.autoApproveLimit)}, so it goes straight to the treasurer.
-            </>
-          ) : (
-            <>
-              Goes to a committee vote and needs <span className="font-semibold text-ink">{need} of {eligible}</span> yes votes. You can’t vote on your own request.
-            </>
-          )}
-        </motion.div>
-      </AnimatePresence>
+      <div className="rounded-md bg-ink/[0.05] p-3 text-sm text-ink-2">
+        Every request goes to a committee vote. This one needs <span className="font-semibold text-ink">{need} of {eligible}</span> yes votes, and you can’t vote on your own request.
+        {!enoughVoters && (
+          <span className="mt-1 block text-brick">
+            You need at least 3 committee members before requests can be voted on, because nobody can approve spending alone. The president can add them in Settings.
+          </span>
+        )}
+      </div>
 
       <button disabled={!valid || busy} className="btn btn-ink">
         {busy ? <Loader2 size={16} className="animate-spin" /> : 'Submit request'}
@@ -163,7 +151,7 @@ export default function Committee() {
       <PageHeader
         eyebrow="Committee"
         title="Committee dashboard"
-        sub={`${members.filter((m) => isCommittee(m.role)).length} members. Anything over ${eur(settings.autoApproveLimit)} needs more than ${settings.approvalPercent}% of eligible votes.`}
+        sub={`${members.filter((m) => isCommittee(m.role)).length} members. Every request needs more than ${settings.approvalPercent}% of eligible votes, and at least two approvals.`}
       />
 
       <Reveal>

@@ -118,7 +118,8 @@ export default function RequestDetail() {
   const requester = memberById(members, req.requesterId)
   const t = tally(req, members, settings)
   const block = voteBlock(req, me)
-  const isAuto = req.status === 'auto' || (req.votes.length === 0 && req.amount < settings.autoApproveLimit && req.status !== 'voting')
+  // Requests made before auto-approval was removed may still have this status.
+  const isAuto = req.status === 'auto'
   const decided = req.status !== 'voting'
   const approved = ['approved', 'auto', 'spent'].includes(req.status)
   const canPay = me.role === 'treasurer' && (req.status === 'approved' || req.status === 'auto')
@@ -127,7 +128,7 @@ export default function RequestDetail() {
   const steps: { label: string; sub?: string; state: 'done' | 'now' | 'todo' | 'fail' }[] = [
     { label: 'Submitted', sub: dateTime(req.createdAt), state: 'done' },
     isAuto
-      ? { label: 'Auto-approved', sub: `Under ${eur(settings.autoApproveLimit)}`, state: 'done' }
+      ? { label: 'Approved without a vote', sub: 'Made before every request needed a vote', state: 'done' }
       : req.status === 'rejected'
         ? { label: 'Rejected', sub: req.decidedAt && dateTime(req.decidedAt), state: 'fail' }
         : { label: decided ? 'Approved' : 'Committee vote', sub: decided ? req.decidedAt && dateTime(req.decidedAt) : `${t.yes} of ${t.need} yes votes`, state: decided ? 'done' : 'now' },
@@ -170,7 +171,7 @@ export default function RequestDetail() {
             <Section title="Votes" right={!isAuto && <span className="font-mono text-xs text-ink-3">{t.yes} yes · {t.no} no · {t.need} needed</span>}>
               {isAuto ? (
                 <p className="py-5 text-sm text-ink-2">
-                  No vote needed. It’s under the {eur(settings.autoApproveLimit)} limit set by the president. The treasurer still has to upload a receipt.
+                  This request was approved without a vote, under a rule the society no longer uses. Every new request goes to a committee vote.
                 </p>
               ) : (
                 <>

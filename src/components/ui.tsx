@@ -8,7 +8,7 @@ import type { ChainStatus, Role, Status } from '../lib/types'
 export const STATUS_META: Record<Status, { label: string; cls: string; swatch: string }> = {
   voting: { label: 'Voting', cls: 'bg-sun text-ink', swatch: 'bg-sun' },
   approved: { label: 'Approved', cls: 'bg-cobalt text-white', swatch: 'bg-cobalt' },
-  auto: { label: 'Auto-approved', cls: 'bg-leaf text-white', swatch: 'bg-leaf' },
+  auto: { label: 'Approved (no vote)', cls: 'bg-leaf text-white', swatch: 'bg-leaf' },
   spent: { label: 'Spent', cls: 'bg-ink text-paper', swatch: 'bg-ink' },
   rejected: { label: 'Rejected', cls: 'text-brick ring-1 ring-inset ring-brick', swatch: 'ring-1 ring-inset ring-brick' },
 }
