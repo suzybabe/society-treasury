@@ -17,12 +17,20 @@ const MAX_ATTEMPTS = 8
  */
 export async function enqueueChain(
   tx: Tx,
-  job: { method: string; args: Record<string, unknown>; onBehalfOf: string | null; target?: ChainTarget; activityId?: number | null },
+  job: {
+    method: string
+    args: Record<string, unknown>
+    /** The member acting. Use `system: true` instead for calls the app makes itself (e.g. add_president). */
+    onBehalfOf: string | null
+    system?: boolean
+    target?: ChainTarget
+    activityId?: number | null
+  },
 ) {
-  if (!job.onBehalfOf) return
+  if (!job.onBehalfOf && !job.system) return
   await tx.insert(chainJobs).values({
     method: job.method,
-    args: { ...job.args, on_behalf_of: job.onBehalfOf },
+    args: job.system ? job.args : { ...job.args, on_behalf_of: job.onBehalfOf },
     target: job.target ?? { kind: 'none' },
     activityId: job.activityId ?? null,
   })

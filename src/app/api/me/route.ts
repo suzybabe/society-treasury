@@ -1,7 +1,9 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { currentMember } from "@/server/auth";
-import { db, schema } from "@/server/db";
+import { enqueueChain, syncChainSoon } from "@/server/chain";
+import { db, schema, type Tx } from "@/server/db";
+import type { MemberRow } from "@/server/db/schema";
 import { env } from "@/server/env";
 import { ApiError, body, ok, route } from "@/server/http";
 import { getPrivyProfile } from "@/server/privy";
@@ -16,64 +18,63 @@ export const GET = route(async (req: Request) => {
 });
 
 /**
+ * Makes a member president (or co-president) with an active pass. Used for
+ * the people listed in BOOTSTRAP_PRESIDENT_EMAIL. The first president is set
+ * on NEAR when the contract is deployed; co-presidents are added on-chain by
+ * the app (the contract account pays the gas).
+ */
+async function makePresident(tx: Tx, member: MemberRow, near: string | null): Promise<MemberRow> {
+  const society = await getSociety(tx);
+  await tx.select().from(societies).where(eq(societies.id, society.id)).for("update");
+  const existing = await tx.query.members.findFirst({ where: and(eq(members.role, "president"), eq(members.status, "active")) });
+  const hadPass = member.passNumber != null;
+  const [row] = await tx
+    .update(members)
+    .set({
+      role: "president",
+      status: "active",
+      nearAccountId: near,
+      ...(hadPass ? {} : { passNumber: await nextPassNumber(tx), feeMethod: "waived" as const, feeConfirmedAt: new Date() }),
+    })
+    .where(eq(members.id, member.id))
+    .returning();
+  const pass = String(row.passNumber).padStart(4, "0");
+  const activityId = await logActivity(tx, "pass", existing ? `${row.name ?? row.email} joined as co-president with pass #${pass}` : `Founding president joined with pass #${pass}`, row.id);
+  if (existing && near) {
+    await enqueueChain(tx, { method: "add_president", args: { account_id: near }, onBehalfOf: null, system: true, target: { kind: "pass", memberId: row.id }, activityId });
+  }
+  return row;
+}
+
+/**
  * Registers the signed-in Privy user, or syncs their email and NEAR wallet.
  * Called after every sign-in. New sign-ups wait for the treasurer to confirm
- * their fee, except the bootstrap president (BOOTSTRAP_PRESIDENT_EMAIL).
+ * their fee, except people listed in BOOTSTRAP_PRESIDENT_EMAIL, who become
+ * (co-)presidents straight away.
  */
 export const POST = route(async (req: Request) => {
   const { privyUserId, member } = await currentMember(req);
   const profile = await getPrivyProfile(privyUserId);
+  const listed = env.presidentEmails().includes(profile.email);
 
   if (member) {
-    // The founder may have signed up before BOOTSTRAP_PRESIDENT_EMAIL was set.
-    if (member.status === "pending" && member.email === env.bootstrapPresidentEmail()) {
-      const promoted = await db().transaction(async (tx) => {
-        const society = await getSociety(tx);
-        await tx.select().from(societies).where(eq(societies.id, society.id)).for("update");
-        const hasPresident = await tx.query.members.findFirst({ where: and(eq(members.role, "president"), eq(members.status, "active")) });
-        if (hasPresident) return null;
-        const [row] = await tx
-          .update(members)
-          .set({ role: "president", status: "active", passNumber: await nextPassNumber(tx), feeMethod: "waived", feeConfirmedAt: new Date(), nearAccountId: profile.nearAccountId ?? member.nearAccountId })
-          .where(eq(members.id, member.id))
-          .returning();
-        await logActivity(tx, "pass", `Founding president joined with pass #${String(row.passNumber).padStart(4, "0")}`, row.id);
-        return row;
-      });
-      if (promoted) return ok({ me: await loadMe(promoted) });
+    const near = profile.nearAccountId ?? member.nearAccountId;
+    // Listed after they'd already signed up, or added to the list later.
+    if (listed && member.role !== "president") {
+      const promoted = await db().transaction((tx) => makePresident(tx, { ...member, email: profile.email }, near));
+      syncChainSoon();
+      return ok({ me: await loadMe(promoted) });
     }
     if (member.email === profile.email && member.nearAccountId === profile.nearAccountId) return ok({ me: await loadMe(member) });
-    const [updated] = await db()
-      .update(members)
-      .set({ email: profile.email, nearAccountId: profile.nearAccountId ?? member.nearAccountId })
-      .where(eq(members.id, member.id))
-      .returning();
+    const [updated] = await db().update(members).set({ email: profile.email, nearAccountId: near }).where(eq(members.id, member.id)).returning();
     return ok({ me: await loadMe(updated) });
   }
 
   const created = await db().transaction(async (tx) => {
-    // Lock the society row so two sign-ups can't claim the same pass number.
-    const society = await getSociety(tx);
-    await tx.select().from(societies).where(eq(societies.id, society.id)).for("update");
-
-    const bootstrap = env.bootstrapPresidentEmail();
-    const hasPresident = await tx.query.members.findFirst({ where: and(eq(members.role, "president"), eq(members.status, "active")) });
-    const isFounder = !!bootstrap && bootstrap === profile.email && !hasPresident;
-
-    const [row] = await tx
-      .insert(members)
-      .values({
-        privyUserId,
-        email: profile.email,
-        nearAccountId: profile.nearAccountId,
-        ...(isFounder
-          ? { role: "president" as const, status: "active" as const, passNumber: await nextPassNumber(tx), feeMethod: "waived" as const, feeConfirmedAt: new Date() }
-          : {}),
-      })
-      .returning();
-    if (isFounder) await logActivity(tx, "pass", `Founding president joined with pass #${String(row.passNumber).padStart(4, "0")}`, row.id);
-    return row;
+    const [row] = await tx.insert(members).values({ privyUserId, email: profile.email, nearAccountId: profile.nearAccountId }).returning();
+    return listed ? makePresident(tx, row, profile.nearAccountId) : row;
   });
+  if (listed) syncChainSoon();
   return ok({ me: toMe(created) }, 201);
 });
 

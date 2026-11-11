@@ -21,5 +21,13 @@ export const env = {
   /** Function-call access key on the contract account; it pays the gas. */
   nearRecorderKey: () => process.env.NEAR_RECORDER_PRIVATE_KEY || null,
   /** The first person to sign up with this email becomes president. */
-  bootstrapPresidentEmail: () => process.env.BOOTSTRAP_PRESIDENT_EMAIL?.trim().toLowerCase() || null,
+  /**
+   * Comma-separated. Each person listed becomes a (co-)president when they
+   * sign up, or on their next sign-in if they already have an account.
+   */
+  presidentEmails: (): string[] =>
+    (process.env.BOOTSTRAP_PRESIDENT_EMAIL ?? '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
 }
