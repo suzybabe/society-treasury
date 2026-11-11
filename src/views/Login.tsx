@@ -1,11 +1,12 @@
 'use client'
 
-import { ArrowRight, Check, Loader2, LogOut } from 'lucide-react'
+import { ArrowRight, Loader2 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import useSWR from 'swr'
 import { MembershipPass } from '../components/MembershipPass'
+import { PendingMembership } from '../components/PendingMembership'
 import { CountUp, EASE, int, Reveal, WordsUp } from '../components/motion'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { Logo } from '../components/ui'
@@ -181,21 +182,7 @@ function SignIn() {
         </Step>
       ) : (
         <Step k="pending">
-          <div className="box p-5">
-            <div className="flex items-center gap-2 font-semibold">
-              <Check size={16} className="text-leaf" /> You’re signed up, {session.me?.name?.split(' ')[0]}.
-            </div>
-            <p className="mt-2 text-sm text-ink-2">
-              Pay the membership fee to the treasurer (cash, card or bank transfer). Once they confirm it, your pass is issued and this page opens the treasury automatically.
-            </p>
-            <dl className="mt-4 space-y-1 font-mono text-[11px] text-ink-3">
-              <div>Email · {session.me?.email}</div>
-              <div className="truncate">NEAR account · {session.me?.near ?? 'being created'}</div>
-            </dl>
-            <button onClick={() => void session.signOut()} className="mt-4 inline-flex items-center gap-1.5 text-xs text-ink-3 hover:text-ink">
-              <LogOut size={13} /> Sign out
-            </button>
-          </div>
+          <PendingMembership />
         </Step>
       )}
     </AnimatePresence>

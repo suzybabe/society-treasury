@@ -20,6 +20,8 @@ interface Session {
   sendCode: (email: string) => Promise<void>
   verifyCode: (code: string) => Promise<void>
   saveName: (name: string) => Promise<void>
+  /** Sends proof of payment (name, method, file) for the treasurer to review. */
+  submitFeeProof: (form: FormData) => Promise<void>
   retry: () => void
   signOut: () => Promise<void>
   /** Calls our API as the signed-in user. */
@@ -101,6 +103,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     },
     saveName: async (name) => {
       const res = await api<{ me: Me }>('/api/me', { method: 'PATCH', json: { name } })
+      setMe(res.me)
+    },
+    submitFeeProof: async (form) => {
+      const res = await api<{ me: Me }>('/api/me/fee-proof', { form })
       setMe(res.me)
     },
     retry: () => {
