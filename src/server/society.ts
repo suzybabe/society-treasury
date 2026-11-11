@@ -1,12 +1,14 @@
 import 'server-only'
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { COMMITTEE_ROLES } from '@/lib/rules'
-import type { FeeMethod, FeeSubmission, Me, Member, Settings, TreasuryState } from '@/lib/types'
+import { CHAIN_METHOD_LABEL } from '@/lib/near'
+import type { ChainStatus, FeeMethod, FeeSubmission, Me, Member, Settings, TreasuryState } from '@/lib/types'
+import { env } from './env'
 import { db, schema, type Tx } from './db'
 import type { FeeProofRow, MemberRow, SocietyRow } from './db/schema'
 import { toEuros } from './http'
 
-const { societies, members, spendRequests, votes, receipts, events, checkins, activity, feeProofs } = schema
+const { societies, members, spendRequests, votes, receipts, events, checkins, activity, feeProofs, chainJobs } = schema
 
 const DEFAULT_SOCIETY = {
   name: process.env.SOCIETY_NAME || 'Computing Society',
@@ -126,6 +128,21 @@ export async function buildState(me: MemberRow): Promise<TreasuryState> {
   ])
 
   // Submissions awaiting review, newest first, so the first one per member wins.
+  // Every contract call the app has queued, oldest first, so the latest per record wins.
+  const jobs = await d.query.chainJobs.findMany({ orderBy: asc(chainJobs.id) })
+  const toStatus = (j: (typeof jobs)[number]): ChainStatus => ({ status: j.status, tx: j.txHash ?? undefined, error: j.status === 'failed' ? (j.error ?? undefined) : undefined })
+  const chainBy = new Map<string, ChainStatus>()
+  for (const j of jobs) {
+    const t = j.target
+    if (t.kind === 'pass') chainBy.set(`pass:${t.memberId}`, toStatus(j))
+    if (t.kind === 'request') chainBy.set(`request:${t.requestId}`, toStatus(j))
+    if (t.kind === 'vote') chainBy.set(`vote:${t.requestId}:${t.memberId}`, toStatus(j))
+    if (t.kind === 'receipt') chainBy.set(`receipt:${t.requestId}`, toStatus(j))
+    if (j.activityId) chainBy.set(`activity:${j.activityId}`, toStatus(j))
+  }
+  /** A record's chain status, falling back to a stored hash for records made before the outbox. */
+  const chainOf = (key: string, tx: string | null): ChainStatus | undefined => chainBy.get(key) ?? (tx ? { status: 'done', tx } : undefined)
+
   const reviewing =
     pendingRows.length > 0
       ? await d.query.feeProofs.findMany({
@@ -155,8 +172,9 @@ export async function buildState(me: MemberRow): Promise<TreasuryState> {
       createdAt: r.createdAt.toISOString(),
       status: r.status,
       tx: r.txHash ?? undefined,
+      chain: chainOf(`request:${r.id}`, r.txHash),
       decidedAt: r.decidedAt?.toISOString(),
-      votes: (votesByRequest.get(r.id) ?? []).map((v) => ({ memberId: v.memberId, choice: v.choice, at: v.createdAt.toISOString(), tx: v.txHash ?? undefined })),
+      votes: (votesByRequest.get(r.id) ?? []).map((v) => ({ memberId: v.memberId, choice: v.choice, at: v.createdAt.toISOString(), tx: v.txHash ?? undefined, chain: chainOf(`vote:${r.id}:${v.memberId}`, v.txHash) })),
       receipt: receipt && {
         id: receipt.id,
         fileName: receipt.fileName,
@@ -165,6 +183,7 @@ export async function buildState(me: MemberRow): Promise<TreasuryState> {
         uploadedAt: receipt.uploadedAt.toISOString(),
         paidBy: receipt.uploadedBy,
         tx: receipt.txHash ?? undefined,
+        chain: chainOf(`receipt:${r.id}`, receipt.txHash),
       },
     }
   })
@@ -174,7 +193,7 @@ export async function buildState(me: MemberRow): Promise<TreasuryState> {
   const spentCents = sum(requestRows, 'spent')
 
   return {
-    me: toMember(me),
+    me: { ...toMember(me), passChain: chainOf(`pass:${me.id}`, me.passTxHash) },
     settings: toSettings(society),
     totals: {
       balance: toEuros(society.openingBalanceCents + collectedCents - spentCents),
@@ -185,7 +204,7 @@ export async function buildState(me: MemberRow): Promise<TreasuryState> {
       carriedOver: toEuros(society.openingBalanceCents),
       passes: memberRows.length,
     },
-    members: memberRows.map(toMember),
+    members: memberRows.map((m) => ({ ...toMember(m), passChain: chainOf(`pass:${m.id}`, m.passTxHash) })),
     requests,
     // Sign-ups with a submission to review come first.
     payments: pendingRows
@@ -195,6 +214,11 @@ export async function buildState(me: MemberRow): Promise<TreasuryState> {
       })
       .sort((a, b) => Number(!!b.submission) - Number(!!a.submission)),
     events: eventRows.map((e) => ({ id: String(e.id), name: e.name, date: e.startsAt.toISOString(), location: e.location, attendees: attendance.get(e.id) ?? 0, checkedIn: mine.has(e.id) })),
-    activity: activityRows.map((a) => ({ id: String(a.id), kind: a.kind, text: a.text, at: a.createdAt.toISOString(), tx: a.txHash ?? undefined })),
+    activity: activityRows.map((a) => ({ id: String(a.id), kind: a.kind, text: a.text, at: a.createdAt.toISOString(), tx: a.txHash ?? undefined, chain: chainOf(`activity:${a.id}`, a.txHash) })),
+    chainLog: jobs
+      .slice(-200)
+      .reverse()
+      .map((j) => ({ id: j.id, method: j.method, label: CHAIN_METHOD_LABEL[j.method] ?? j.method, status: j.status, tx: j.txHash ?? undefined, error: j.status === 'failed' ? (j.error ?? undefined) : undefined, at: (j.doneAt ?? j.createdAt).toISOString() })),
+    contractId: env.nearContractId(),
   }
 }

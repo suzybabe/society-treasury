@@ -2,6 +2,25 @@
 // the database stores cents. `tx` fields stay empty until the NEAR contract
 // records the item on-chain.
 
+/** Where a record stands on NEAR. Missing means it isn't recorded on-chain (e.g. check-ins). */
+export interface ChainStatus {
+  status: 'pending' | 'done' | 'failed'
+  tx?: string
+  /** Why the contract rejected it, when failed. */
+  error?: string
+}
+
+/** One contract transaction made by the app, for the public on-chain log. */
+export interface ChainLogEntry {
+  id: number
+  method: string
+  label: string
+  status: 'pending' | 'done' | 'failed'
+  tx?: string
+  error?: string
+  at: string
+}
+
 export type Role = 'president' | 'treasurer' | 'committee' | 'student'
 
 export type Status = 'voting' | 'approved' | 'auto' | 'rejected' | 'spent'
@@ -22,6 +41,7 @@ export interface Member {
   joinedAt: string
   /** NEAR transaction that minted their pass, once recorded. */
   passTx?: string
+  passChain?: ChainStatus
 }
 
 /** A student's latest proof-of-payment submission. */
@@ -55,6 +75,7 @@ export interface Vote {
   choice: 'yes' | 'no'
   at: string
   tx?: string
+  chain?: ChainStatus
 }
 
 export interface Receipt {
@@ -65,6 +86,7 @@ export interface Receipt {
   uploadedAt: string
   paidBy: string
   tx?: string
+  chain?: ChainStatus
 }
 
 export interface SpendRequest {
@@ -78,6 +100,7 @@ export interface SpendRequest {
   status: Status
   votes: Vote[]
   tx?: string
+  chain?: ChainStatus
   decidedAt?: string
   receipt?: Receipt
 }
@@ -109,6 +132,7 @@ export interface Activity {
   text: string
   at: string
   tx?: string
+  chain?: ChainStatus
 }
 
 export interface Settings {
@@ -142,4 +166,7 @@ export interface TreasuryState {
   payments: FeePayment[]
   events: SocietyEvent[]
   activity: Activity[]
+  /** Every contract transaction the app has made, newest first. */
+  chainLog: ChainLogEntry[]
+  contractId: string | null
 }
