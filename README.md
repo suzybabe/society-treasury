@@ -154,15 +154,29 @@ npm run dev
 
 Then open [http://localhost:3000](http://localhost:3000).
 
+### Trying the demo
+
+The frontend currently runs on mock data in the browser, so every flow can be tried before the NEAR contract is deployed. Transaction hashes are placeholders, and refreshing the page resets the data.
+
+- Sign in with a demo account on the login page, or switch accounts with the "Demo · view as" control at the bottom left.
+- You can also open the app as a specific role: `/home?as=m1` (president), `?as=m2` (treasurer), `?as=m3` (committee) or `?as=m6` (student).
+- Use the sun/moon button in the header to switch between light and dark mode. It follows your system setting until you choose.
+
 ---
 
 ## Project structure
 
 ```
 society-treasury/
-├── public/            # Static files (icons, images)
+├── public/              # Static files (icons, images)
 ├── src/
-│   └── app/           # Next.js pages (App Router)
+│   ├── app/             # Next.js routes (App Router)
+│   │   ├── login/       # Email sign-in
+│   │   └── (app)/       # Signed-in pages: home, spending, spending/[id], committee, settings
+│   ├── views/           # Page content for each route
+│   ├── components/      # App shell, membership pass, theme toggle, shared UI
+│   ├── state/store.tsx  # Demo data store (to be replaced by NEAR contract calls)
+│   └── lib/             # Types, voting rules, formatting, mock data
 ├── package.json
 ├── tsconfig.json
 └── README.md
