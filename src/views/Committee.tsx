@@ -10,44 +10,8 @@ import { LedgerHead, RequestRow } from '../components/RequestRow'
 import { Empty, Figure, PageHeader, Section, VoteMeter } from '../components/ui'
 import { eur, timeAgo } from '../lib/format'
 import { isCommittee, requiredYes, tally, voteBlock } from '../lib/rules'
-import { CATEGORIES, type Category, type FeeMethod, type FeePayment } from '../lib/types'
+import { CATEGORIES, type Category } from '../lib/types'
 import { memberById, useMe, useTreasury } from '../state/store'
-
-/** One sign-up waiting for the treasurer: pick how they paid, then issue the pass. */
-function PaymentRow({ p }: { p: FeePayment }) {
-  const { settings, confirmFee } = useTreasury()
-  const [method, setMethod] = useState<FeeMethod>('cash')
-  const [busy, setBusy] = useState(false)
-  return (
-    <motion.div {...rowMotion} className="flex flex-col gap-3 border-b border-ink/12 py-3 sm:flex-row sm:items-center">
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{p.name}</div>
-        <div className="truncate text-xs text-ink-3">
-          {p.email} · signed up {timeAgo(p.submittedAt)} · fee {eur(settings.membershipFee)}
-        </div>
-      </div>
-      <div className="flex gap-2">
-        <select className="input !h-[2.1rem] !w-32 !text-xs" value={method} onChange={(e) => setMethod(e.target.value as FeeMethod)} aria-label="How they paid">
-          <option value="cash">Cash</option>
-          <option value="card">Card</option>
-          <option value="bank">Bank transfer</option>
-        </select>
-        <motion.button
-          whileTap={{ scale: 0.94 }}
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true)
-            await confirmFee(p.id, method)
-            setBusy(false)
-          }}
-          className="btn btn-line btn-sm"
-        >
-          {busy ? <Loader2 size={14} className="animate-spin" /> : 'Confirm & issue pass'}
-        </motion.button>
-      </div>
-    </motion.div>
-  )
-}
 
 function NewEventForm() {
   const { createEvent } = useTreasury()
@@ -212,7 +176,7 @@ export default function Committee() {
             <Figure label="Ready to pay" value={<CountUp value={toPay.length} format={int} />} hint={eur(toPay.reduce((s, r) => s + r.amount, 0))} />
           </div>
           <div className="border-l border-t border-ink/12 pl-5 lg:border-t-0">
-            <Figure label="Fees to confirm" value={<CountUp value={payments.length} format={int} />} />
+            <Figure label="Awaiting approval" value={<CountUp value={payments.length} format={int} />} />
           </div>
         </div>
       </Reveal>
@@ -263,16 +227,15 @@ export default function Committee() {
             </Section>
           </Reveal>
 
-          {isTreasurer && (
+          {payments.length > 0 && (
             <Reveal>
-              <Section title="Fee payments to confirm" right={<span className="font-mono text-xs text-ink-3">{payments.length} pending</span>}>
-                {payments.length === 0 && <Empty title="No one waiting" sub="New sign-ups appear here. Confirm once they’ve paid you." />}
-                <AnimatePresence initial={false}>
-                  {payments.map((p) => (
-                    <PaymentRow key={p.id} p={p} />
-                  ))}
-                </AnimatePresence>
-              </Section>
+              <Link href="/members" className="box group flex items-center justify-between gap-4 p-5 transition hover:border-ink">
+                <div>
+                  <div className="font-semibold">{payments.length} new member{payments.length > 1 ? 's' : ''} waiting for approval</div>
+                  <div className="text-sm text-ink-3">{isTreasurer ? 'Review their proof of payment and issue passes.' : 'The treasurer approves them in Members.'}</div>
+                </div>
+                <span className="font-medium transition group-hover:translate-x-1">Members →</span>
+              </Link>
             </Reveal>
           )}
 
