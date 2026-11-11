@@ -28,6 +28,9 @@ Members can call the contract with their own NEAR account. The contract account 
 | `update_settings(settings)` | president | Changes the voting rules and fee |
 | `create_request(app_ref, title, category, amount_cents)` | committee | Asks to spend money |
 | `vote(request_id, approve)` | committee | Votes on a request |
+| `student_vote(request_id, approve)` | members with a pass, not on the committee | Student vote. Once `student_quorum` students have voted, their majority counts as one committee vote |
+| `set_student_quorum(quorum)` | president | How many student votes are needed before they count |
+| `migrate()` | contract account (once) | Upgrades state from the version before student votes |
 | `mark_spent(request_id, receipt_sha256)` | treasurer | Records the receipt hash and marks it Spent |
 
 Every change method also takes an optional `on_behalf_of`.
