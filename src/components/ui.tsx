@@ -1,7 +1,9 @@
+import { Link2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { shortHash } from '../lib/chain'
 import { initials } from '../lib/format'
-import type { Role, Status } from '../lib/types'
+import { explorerTx } from '../lib/near'
+import type { ChainStatus, Role, Status } from '../lib/types'
 
 export const STATUS_META: Record<Status, { label: string; cls: string; swatch: string }> = {
   voting: { label: 'Voting', cls: 'bg-sun text-ink', swatch: 'bg-sun' },
@@ -48,19 +50,56 @@ export function Avatar({ name, size = 32 }: { name: string; size?: number }) {
   )
 }
 
-/** A NEAR transaction hash. Renders nothing until the item is recorded on-chain. */
-export function TxChip({ tx, className = '' }: { tx?: string; className?: string }) {
-  if (!tx) return null
+/**
+ * Where a record stands on NEAR: a link to the transaction once it's on-chain,
+ * "Recording…" while it's on its way, or "Not recorded" (with the reason) if
+ * the contract rejected it. Renders nothing for records that aren't on-chain.
+ */
+export function ChainChip({ chain, tx, className = '' }: { chain?: ChainStatus; tx?: string; className?: string }) {
+  const c = chain ?? (tx ? { status: 'done' as const, tx } : undefined)
+  if (!c) return null
+  if (c.status === 'done' && c.tx) {
+    return (
+      <a
+        href={explorerTx(c.tx)}
+        target="_blank"
+        rel="noreferrer"
+        title={`View transaction ${c.tx} on NEAR Explorer`}
+        className={`inline-flex items-center gap-1 whitespace-nowrap font-mono text-[11px] text-accent underline-offset-2 hover:underline ${className}`}
+      >
+        <Link2 size={11} /> {shortHash(c.tx)} ↗
+      </a>
+    )
+  }
+  if (c.status === 'pending') {
+    return (
+      <span className={`inline-flex items-center gap-1.5 whitespace-nowrap font-mono text-[11px] text-ink-3 ${className}`}>
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" /> Recording on NEAR…
+      </span>
+    )
+  }
   return (
-    <a
-      href={`https://testnet.nearblocks.io/txns/${tx}`}
-      target="_blank"
-      rel="noreferrer"
-      title={`NEAR transaction ${tx}`}
-      className={`font-mono text-[11px] text-ink-3 underline-offset-2 hover:text-ink hover:underline ${className}`}
-    >
-      tx {shortHash(tx)}
-    </a>
+    <span title={c.error} className={`whitespace-nowrap font-mono text-[11px] text-brick ${className}`}>
+      Not recorded on NEAR
+    </span>
+  )
+}
+
+/** Older call sites that only have a hash. */
+export function TxChip({ tx, className = '' }: { tx?: string; className?: string }) {
+  return <ChainChip tx={tx} className={className} />
+}
+
+/** A small status dot for places that can't contain a link (e.g. inside a row that is itself a link). */
+export function ChainDot({ chain }: { chain?: ChainStatus }) {
+  if (!chain) return null
+  const label = chain.status === 'done' ? 'Recorded on NEAR' : chain.status === 'pending' ? 'Recording on NEAR' : 'Not recorded on NEAR'
+  const tone = chain.status === 'done' ? 'bg-leaf' : chain.status === 'pending' ? 'animate-pulse bg-accent' : 'bg-brick'
+  return (
+    <span title={label} className="inline-flex items-center gap-1 font-mono text-[10.5px] text-ink-3">
+      <span className={`h-1.5 w-1.5 rounded-full ${tone}`} />
+      {chain.status === 'done' ? 'on NEAR' : chain.status === 'pending' ? 'recording' : 'not on NEAR'}
+    </span>
   )
 }
 
