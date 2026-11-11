@@ -105,6 +105,34 @@ export const receipts = pgTable('receipts', {
   txHash: text('tx_hash'),
 })
 
+export const feeProofStatusEnum = pgEnum('fee_proof_status', ['reviewing', 'accepted', 'rejected'])
+
+/**
+ * A student's proof that they paid the membership fee. Each attempt is a new
+ * row, so a rejected submission stays on record when they try again.
+ */
+export const feeProofs = pgTable(
+  'fee_proofs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => members.id),
+    method: feeMethodEnum('method').notNull(),
+    fileName: text('file_name').notNull(),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    sha256: text('sha256').notNull(),
+    data: bytea('data').notNull(),
+    status: feeProofStatusEnum('status').notNull().default('reviewing'),
+    reviewNote: text('review_note'),
+    reviewedBy: uuid('reviewed_by').references(() => members.id),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('fee_proofs_member_idx').on(t.memberId, t.submittedAt)],
+)
+
 export const events = pgTable('events', {
   id: serial('id').primaryKey(),
   name: text('name').notNull(),
@@ -144,5 +172,6 @@ export const activity = pgTable(
 )
 
 export type MemberRow = typeof members.$inferSelect
+export type FeeProofRow = typeof feeProofs.$inferSelect
 export type SocietyRow = typeof societies.$inferSelect
 export type RequestRow = typeof spendRequests.$inferSelect
