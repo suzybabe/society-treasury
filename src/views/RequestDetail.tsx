@@ -1,25 +1,60 @@
 'use client'
 
-import { ArrowLeft, Check, Lock, Upload, X } from 'lucide-react'
+import { ArrowLeft, Check, FileText, Loader2, Lock, Upload, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { CountUp, EASE, Reveal } from '../components/motion'
 import { Avatar, Empty, RoleBadge, Section, SpecList, StatusBadge, TxChip, VoteMeter } from '../components/ui'
-import { blockOf } from '../lib/chain'
 import { dateTime, eur, timeAgo } from '../lib/format'
 import { tally, voteBlock, VOTE_BLOCK_TEXT } from '../lib/rules'
 import type { SpendRequest } from '../lib/types'
+import { useSession } from '../state/session'
 import { memberById, useMe, useTreasury } from '../state/store'
+
+/**
+ * Loads the receipt file through the API (it needs the member's token, so a
+ * plain <img src> can't fetch it) and shows images inline or links to PDFs.
+ */
+function ReceiptFile({ receiptId, mimeType, fileName }: { receiptId: string; mimeType: string; fileName: string }) {
+  const { apiResponse } = useSession()
+  const [url, setUrl] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let objectUrl: string | null = null
+    let cancelled = false
+    apiResponse(`/api/receipts/${receiptId}`)
+      .then((res) => res.blob())
+      .then((blob) => {
+        if (cancelled) return
+        objectUrl = URL.createObjectURL(blob)
+        setUrl(objectUrl)
+      })
+      .catch(() => !cancelled && setFailed(true))
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [receiptId, apiResponse])
+
+  if (failed) return <p className="text-sm text-brick">Couldn’t load the receipt file.</p>
+  if (!url) return <p className="flex items-center gap-2 text-sm text-ink-3"><Loader2 size={14} className="animate-spin" /> Loading receipt…</p>
+  if (mimeType.startsWith('image/')) {
+    // A blob: URL created in the browser, which next/image can't optimise.
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={url} alt={fileName} className="max-h-[28rem] rounded-md border border-ink/12 bg-white object-contain" />
+  }
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="btn btn-line btn-sm">
+      <FileText size={14} /> Open {fileName}
+    </a>
+  )
+}
 
 function ReceiptPaper({ req, payer }: { req: SpendRequest; payer?: string }) {
   const r = req.receipt!
-  if (r.previewUrl) {
-    // A local blob: URL from the file picker, which next/image can't optimise.
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={r.previewUrl} alt={r.fileName} className="max-h-96 rounded-md border border-ink/12 bg-white object-contain" />
-  }
   return (
     <motion.div
       initial={{ y: -30, opacity: 0, rotate: 0 }}
@@ -44,6 +79,9 @@ function ReceiptPaper({ req, payer }: { req: SpendRequest; payer?: string }) {
       <div className="mt-3 text-[10px] text-ink-3">
         {dateTime(r.uploadedAt)} · paid by {payer}
       </div>
+      <div className="mt-1 truncate text-[10px] text-ink-3" title={r.sha256}>
+        SHA-256 {r.sha256.slice(0, 16)}…
+      </div>
       <motion.div
         initial={{ scale: 2.2, opacity: 0, rotate: -30 }}
         whileInView={{ scale: 1, opacity: 0.85, rotate: -14 }}
@@ -64,6 +102,7 @@ export default function RequestDetail() {
   const req = requests.find((r) => r.id === id)
   const fileRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   if (!req) {
     return (
@@ -184,7 +223,10 @@ export default function RequestDetail() {
             <Section title="Receipt" right={req.receipt && <TxChip tx={req.receipt.tx} />}>
               <div className="py-6">
                 {req.receipt ? (
-                  <ReceiptPaper req={req} payer={payer} />
+                  <div className="flex flex-col items-start gap-6 sm:flex-row">
+                    <ReceiptPaper req={req} payer={payer} />
+                    <ReceiptFile receiptId={req.receipt.id} mimeType={req.receipt.mimeType} fileName={req.receipt.fileName} />
+                  </div>
                 ) : canPay ? (
                   <div className="max-w-lg">
                     <p className="text-sm text-ink-2">
@@ -198,9 +240,18 @@ export default function RequestDetail() {
                       <Upload size={18} className="transition group-hover:-translate-y-1" />
                       {file ? <span className="font-mono">{file.name}</span> : 'Choose a receipt (image or PDF)'}
                     </button>
-                    <button disabled={!file} onClick={() => markSpent(req.id, file)} className="btn btn-ink mt-3 w-full">
-                      Upload and mark Spent
+                    <button
+                      disabled={!file || uploading}
+                      onClick={async () => {
+                        setUploading(true)
+                        await markSpent(req.id, file)
+                        setUploading(false)
+                      }}
+                      className="btn btn-ink mt-3 w-full"
+                    >
+                      {uploading ? <Loader2 size={16} className="animate-spin" /> : 'Upload and mark Spent'}
                     </button>
+                    <p className="mt-2 text-xs text-ink-3">Images or PDF, up to 5 MB.</p>
                   </div>
                 ) : (
                   <p className="text-sm text-ink-3">{req.status === 'rejected' ? 'Rejected, so no money was spent.' : 'The treasurer uploads it after paying.'}</p>
@@ -267,10 +318,10 @@ export default function RequestDetail() {
             <div className="label mb-1">On-chain record</div>
             <SpecList
               rows={[
-                ['Transaction', <TxChip key="tx" tx={req.tx} />],
-                ['Block', <span key="block" className="num font-mono text-xs">{blockOf(req.tx).toLocaleString()}</span>],
-                ['Contract', <span key="contract" className="font-mono text-xs">treasury.{settings.shortName.toLowerCase()}.testnet</span>],
-                ['Votes stored', <span key="votes" className="font-mono text-xs">{req.votes.length}</span>],
+                ['Reference', <span key="ref" className="font-mono text-xs">{req.id}</span>],
+                ['NEAR transaction', req.tx ? <TxChip key="tx" tx={req.tx} /> : <span key="tx" className="text-xs text-ink-3">Not on NEAR yet</span>],
+                ['Votes recorded', <span key="votes" className="font-mono text-xs">{req.votes.length}</span>],
+                ...(req.receipt ? ([['Receipt SHA-256', <span key="sha" className="font-mono text-xs" title={req.receipt.sha256}>{req.receipt.sha256.slice(0, 12)}…</span>]] as [string, React.ReactNode][]) : []),
               ]}
             />
           </div>
