@@ -33,6 +33,7 @@ export interface TreasuryStore extends TreasuryState {
   castVote: (requestId: string, choice: 'yes' | 'no') => Promise<void>
   submitRequest: (r: NewRequest) => Promise<string | null>
   confirmFee: (memberId: string, method: FeeMethod) => Promise<void>
+  rejectFee: (memberId: string, note: string) => Promise<boolean>
   markSpent: (requestId: string, file: File | null) => Promise<void>
   checkIn: (eventId: string) => Promise<void>
   createEvent: (e: NewEvent) => Promise<boolean>
@@ -100,6 +101,7 @@ export function TreasuryProvider({ children }: { children: ReactNode }) {
     confirmFee: async (memberId, method) => {
       await act(() => api<{ passNumber: number }>(`/api/members/${memberId}/confirm-fee`, { json: { method } }), (r) => `Fee confirmed. Pass #${String(r.passNumber).padStart(4, '0')} issued.`)
     },
+    rejectFee: async (memberId, note) => !!(await act(() => api(`/api/members/${memberId}/reject-fee`, { json: { note } }), 'Proof rejected. They can send it again.')),
     markSpent: async (requestId, file) => {
       if (!file) return
       const form = new FormData()
