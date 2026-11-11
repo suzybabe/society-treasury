@@ -205,10 +205,7 @@ export default function Login() {
     <div className="flex min-h-screen flex-col">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-5">
         <Logo short={shortName} />
-        <div className="flex items-center gap-4">
-          <span className="hidden font-mono text-[11px] text-ink-3 sm:inline">Track: Social Money · Built on NEAR</span>
-          <ThemeToggle />
-        </div>
+        <ThemeToggle />
       </div>
 
       <main className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-12 px-5 pb-16 pt-1 sm:pt-4 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
