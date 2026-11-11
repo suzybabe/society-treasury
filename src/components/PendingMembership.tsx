@@ -31,8 +31,8 @@ export function PendingMembership() {
         {reviewing ? (
           <motion.div key="review" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3, ease: EASE }} className="p-5">
             <div className="flex items-center gap-2 font-semibold">
-              <span className="relative grid h-6 w-6 place-items-center rounded-full bg-sun text-ink">
-                <span className="absolute inset-0 animate-ping rounded-full bg-sun/60" />
+              <span className="relative grid h-6 w-6 place-items-center rounded-full bg-accent/15 text-accent">
+                <span className="absolute inset-0 animate-ping rounded-full bg-accent/30" />
                 <Clock size={13} className="relative" />
               </span>
               Your payment is being reviewed

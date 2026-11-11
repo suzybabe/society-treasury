@@ -71,7 +71,7 @@ function ApprovalRow({ p, canApprove }: { p: FeePayment; canApprove: boolean }) 
             <div className="truncate text-xs text-ink-3">{p.email}</div>
             <div className="mt-1.5">
               {sub ? (
-                <span className="inline-flex items-center gap-1.5 rounded-[3px] bg-sun px-1.5 py-[3px] font-mono text-[10.5px] font-medium uppercase leading-none text-ink">
+                <span className="inline-flex items-center gap-1.5 rounded-[3px] bg-accent/12 px-1.5 py-[3px] font-mono text-[10.5px] font-medium uppercase leading-none text-accent ring-1 ring-inset ring-accent/30">
                   Proof sent · {METHOD_LABEL[sub.method]} · {timeAgo(sub.submittedAt)}
                 </span>
               ) : (
@@ -178,7 +178,7 @@ export default function Members() {
         <Reveal>
           <Section title="Waiting for approval" right={<span className="font-mono text-xs text-ink-3">{payments.length} pending</span>}>
             {me.role === 'president' && !hasTreasurer && (
-              <p className="mt-3 rounded-md bg-sun/25 px-3 py-2 text-sm">
+              <p className="mt-3 rounded-md bg-accent/10 px-3 py-2 text-sm ring-1 ring-inset ring-accent/20">
                 There’s no treasurer yet, so you approve new members for now. Approve your treasurer first, then make them treasurer in{' '}
                 <Link href="/settings" className="font-medium underline underline-offset-4">
                   Settings

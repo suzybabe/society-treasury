@@ -82,7 +82,7 @@ function NavLinks({ items, variant, active }: { items: NavItem[]; variant: 'side
               <Icon size={18} className={`relative shrink-0 transition-colors ${on ? 'text-paper' : 'text-ink-3 group-hover:text-ink'}`} />
               <span className={`relative flex-1 transition-colors ${on ? 'text-paper' : 'text-ink-2 group-hover:text-ink'}`}>{n.label}</span>
               {!!n.badge && (
-                <span className={`relative grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-mono text-[10.5px] font-medium ${on ? 'bg-accent text-on-accent' : 'bg-sun text-ink'}`}>
+                <span className={`relative grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-mono text-[10.5px] font-medium ${on ? 'bg-accent text-on-accent' : 'bg-accent/15 text-accent'}`}>
                   {n.badge}
                 </span>
               )}
@@ -102,7 +102,7 @@ function NavLinks({ items, variant, active }: { items: NavItem[]; variant: 'side
             {on && <motion.span layoutId="nav-pill-bottom" className="absolute inset-x-1.5 inset-y-1 rounded-lg bg-ink" transition={PILL_SPRING} />}
             <span className="relative">
               <Icon size={19} className={on ? 'text-paper' : 'text-ink-3'} />
-              {!!n.badge && <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-sun px-1 font-mono text-[9px] text-ink">{n.badge}</span>}
+              {!!n.badge && <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 font-mono text-[9px] text-on-accent">{n.badge}</span>}
             </span>
             <span className={`relative ${on ? 'text-paper' : 'text-ink-2'}`}>{n.label}</span>
           </Link>
