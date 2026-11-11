@@ -9,7 +9,7 @@ The on-chain record for a student society: membership passes, committee roles, v
 - Only committee members (president, treasurer, committee) can create requests or vote.
 - Nobody votes on their own request, and each member votes once. Votes can't be changed.
 - A request passes with more than `approval_percent` of eligible votes, and never with fewer than 2 approvals.
-- Requests under `auto_approve_limit_cents` are approved immediately.
+- Every request goes to a committee vote, whatever the amount. Creating one needs at least 2 eligible voters (3 committee members). `auto_approve_limit_cents` is kept in `Settings` for storage compatibility but no longer used.
 - Only the treasurer marks a request Spent, only after it's approved, and only with a SHA-256 receipt hash.
 - Only the treasurer issues passes (or the president, while there's no treasurer). One pass per account.
 - Passes can't be transferred. Records can't be edited or deleted.
@@ -53,7 +53,7 @@ With [near CLI](https://github.com/near/near-cli-rs):
 
 ```bash
 near contract deploy society-treasury.testnet use-file target/near/society_treasury.wasm \
-  with-init-call new json-args '{"society":{"name":"Computing Society","short_name":"COMPSOC","term":"2026/27"},"settings":{"approval_percent":50,"auto_approve_limit_cents":2000,"membership_fee_cents":1500},"president":"<president NEAR account>"}' \
+  with-init-call new json-args '{"society":{"name":"Computing Society","short_name":"COMPSOC","term":"2026/27"},"settings":{"approval_percent":50,"auto_approve_limit_cents":0,"membership_fee_cents":1500},"president":"<president NEAR account>"}' \
   prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet sign-with-legacy-keychain send
 ```
 

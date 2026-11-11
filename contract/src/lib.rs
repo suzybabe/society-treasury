@@ -7,7 +7,7 @@
 //! - only committee members (president, treasurer, committee) can request or vote
 //! - nobody votes on their own request, and each member votes once
 //! - spending needs a committee majority, and never fewer than 2 approvals
-//! - requests under the auto-approve limit are approved immediately
+//! - every request goes to a committee vote, whatever the amount
 //! - only the treasurer marks a request Spent, and only once it's approved
 //! - records are append-only: there is no way to edit or delete them
 //!
@@ -76,7 +76,7 @@ pub struct Society {
 pub struct Settings {
     /// Requests pass with more than this share of eligible votes (50 to 90).
     pub approval_percent: u8,
-    /// Requests below this amount are approved without a vote.
+    /// No longer used: every request goes to a vote. Kept so stored state stays compatible.
     pub auto_approve_limit_cents: u64,
     pub membership_fee_cents: u64,
 }
@@ -283,17 +283,18 @@ impl Treasury {
 
     // ---------- Spending ----------
 
-    /// Committee only: ask to spend money. Under the auto-approve limit it's
-    /// approved at once; otherwise it goes to a committee vote.
+    /// Committee only: ask to spend money. Every request goes to a committee vote.
     pub fn create_request(&mut self, app_ref: String, title: String, category: String, amount_cents: u64, on_behalf_of: Option<AccountId>) -> u32 {
         let actor = self.actor(on_behalf_of);
         self.require_role(&actor, &[Role::President, Role::Treasurer, Role::Committee]);
         require!(amount_cents > 0, "Amount must be more than zero");
         require!(!title.trim().is_empty() && title.len() <= 200, "Title must be 1 to 200 characters");
         require!(app_ref.len() <= 40 && category.len() <= 40, "Reference and category must be 40 characters or fewer");
+        // Nobody approves alone: a request needs at least 2 people who can vote on it.
+        let eligible = self.roles.keys().filter(|a| **a != actor).count();
+        require!(eligible >= 2, "You need at least 3 committee members before requests can be voted on");
 
         let now = env::block_timestamp_ms();
-        let auto = amount_cents < self.settings.auto_approve_limit_cents;
         let id = self.requests.len() + 1;
         let request = SpendRequest {
             id,
@@ -303,9 +304,9 @@ impl Treasury {
             amount_cents,
             requester: actor,
             created_at_ms: now,
-            status: if auto { RequestStatus::AutoApproved } else { RequestStatus::Voting },
+            status: RequestStatus::Voting,
             votes: Vec::new(),
-            decided_at_ms: if auto { Some(now) } else { None },
+            decided_at_ms: None,
             receipt: None,
         };
         emit("request_created", json!({ "id": id, "app_ref": request.app_ref, "requester": request.requester, "amount_cents": amount_cents, "status": request.status }));
@@ -565,13 +566,24 @@ mod tests {
     }
 
     #[test]
-    fn small_requests_are_auto_approved() {
+    #[should_panic(expected = "at least 3 committee members")]
+    fn needs_three_committee_members_to_request() {
+        let mut t = setup();
+        as_caller("pres.testnet");
+        t.issue_pass(acct("treas.testnet"), FeeMethod::Cash, 1500, None);
+        t.set_role(acct("treas.testnet"), Some(Role::Treasurer), None);
+        // Only one other person could vote, so no request could ever pass.
+        t.create_request("REQ-0001".into(), "Snacks".into(), "Food".into(), 500, None);
+    }
+
+    #[test]
+    fn every_request_goes_to_a_vote() {
         let mut t = full_committee();
         as_caller("c1.testnet");
-        let id = t.create_request("REQ-0001".into(), "Snacks".into(), "Food".into(), 1999, None);
-        assert_eq!(t.get_request(id).unwrap().status, RequestStatus::AutoApproved);
-        let id = t.create_request("REQ-0002".into(), "Pizza".into(), "Food".into(), 8640, None);
+        // Even tiny amounts need the committee.
+        let id = t.create_request("REQ-0001".into(), "Snacks".into(), "Food".into(), 100, None);
         assert_eq!(t.get_request(id).unwrap().status, RequestStatus::Voting);
+        assert!(t.get_request(id).unwrap().decided_at_ms.is_none());
     }
 
     #[test]
@@ -642,6 +654,10 @@ mod tests {
         let mut t = full_committee();
         as_caller("c1.testnet");
         let id = t.create_request("REQ-0001".into(), "Snacks".into(), "Food".into(), 1500, None);
+        for voter in ["pres.testnet", "treas.testnet", "c2.testnet"] {
+            as_caller(voter);
+            t.vote(id, true, None);
+        }
         as_caller("treas.testnet");
         t.mark_spent(id, "A".repeat(64), None);
         let r = t.get_request(id).unwrap();
