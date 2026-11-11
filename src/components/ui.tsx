@@ -48,14 +48,19 @@ export function Avatar({ name, size = 32 }: { name: string; size?: number }) {
   )
 }
 
-export function TxChip({ tx, className = '' }: { tx: string; className?: string }) {
+/** A NEAR transaction hash. Renders nothing until the item is recorded on-chain. */
+export function TxChip({ tx, className = '' }: { tx?: string; className?: string }) {
+  if (!tx) return null
   return (
-    <span
-      title={`Mock transaction ${tx}. Will link to the NEAR explorer once the contract is deployed.`}
-      className={`font-mono text-[11px] text-ink-3 ${className}`}
+    <a
+      href={`https://testnet.nearblocks.io/txns/${tx}`}
+      target="_blank"
+      rel="noreferrer"
+      title={`NEAR transaction ${tx}`}
+      className={`font-mono text-[11px] text-ink-3 underline-offset-2 hover:text-ink hover:underline ${className}`}
     >
       tx {shortHash(tx)}
-    </span>
+    </a>
   )
 }
 

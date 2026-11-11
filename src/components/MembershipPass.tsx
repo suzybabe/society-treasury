@@ -85,10 +85,10 @@ export function MembershipPass({ member, term, shortName }: { member: Member; te
             <div className="min-w-0">
               <div className="num font-dot text-[length:17cqw] font-black leading-[0.8] tracking-tight">{String(member.passId).padStart(4, '0')}</div>
               <div className="mt-[3cqw] truncate text-[length:4.4cqw] font-semibold leading-none">{member.name}</div>
-              <div className="mt-[1.4cqw] truncate font-mono text-[length:2.5cqw]">{member.near}</div>
+              <div className="mt-[1.4cqw] truncate font-mono text-[length:2.5cqw]">{member.near ?? "NEAR wallet pending"}</div>
             </div>
             <div className="aspect-square w-[22cqw] shrink-0 rounded-[1.5cqw] bg-white p-[1.6cqw]">
-              <PseudoQR seed={member.near} />
+              <PseudoQR seed={member.near ?? member.id} />
             </div>
           </div>
         </div>

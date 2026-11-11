@@ -6,11 +6,9 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Suspense, useEffect, type ReactNode } from 'react'
 import { shortHash } from '../lib/chain'
-import { timeAgo } from '../lib/format'
-import { DEMO_ACCOUNTS } from '../lib/mock'
 import type { ActivityKind, Role } from '../lib/types'
+import { useSessionOptional } from '../state/session'
 import { useTreasury, useTreasuryOptional } from '../state/store'
-import { EASE } from './motion'
 import { ThemeToggle } from './ThemeToggle'
 import { Avatar, Logo, RoleBadge } from './ui'
 
@@ -30,7 +28,7 @@ const NAV: NavItem[] = [
 export const KIND_TAG: Record<ActivityKind, string> = {
   vote: 'Vote',
   request: 'Request',
-  pass: 'Pass minted',
+  pass: 'Pass issued',
   spent: 'Receipt',
   checkin: 'Check-in',
   settings: 'Governance',
@@ -39,6 +37,7 @@ export const KIND_TAG: Record<ActivityKind, string> = {
 
 export function Ticker() {
   const { activity } = useTreasury()
+  if (activity.length === 0) return <div className="h-8 bg-ink" />
   const row = (
     <div className="flex shrink-0 items-center">
       {activity.slice(0, 10).map((a) => (
@@ -46,7 +45,7 @@ export function Ticker() {
           <span className="h-1.5 w-1.5 rounded-full bg-accent" />
           <span className="text-paper/50">{KIND_TAG[a.kind]}</span>
           <span>{a.text}</span>
-          <span className="text-paper/40">{shortHash(a.tx)}</span>
+          {a.tx && <span className="text-paper/40">{shortHash(a.tx)}</span>}
         </span>
       ))}
     </div>
@@ -90,56 +89,45 @@ function Nav(props: { items: NavItem[]; id: string }) {
   )
 }
 
-function DemoSwitcher() {
-  const { me, members, login } = useTreasury()
-  const router = useRouter()
-  const options = members.filter((m) => DEMO_ACCOUNTS.includes(m.id) || m.role !== 'student' || m.id === me?.id)
+function Loading() {
   return (
-    <motion.label
-      initial={{ y: 40, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ delay: 0.8, duration: 0.6, ease: EASE }}
-      className="fixed bottom-4 left-4 z-40 flex items-center gap-2 rounded-full bg-ink py-1 pl-3.5 pr-1 text-paper shadow-lg"
-    >
-      <span className="font-mono text-[10.5px] uppercase tracking-wide text-paper/60">Demo · view as</span>
-      <select
-        className="h-7 cursor-pointer appearance-none rounded-full bg-paper/10 px-3 text-xs font-medium text-paper outline-none hover:bg-paper/20"
-        value={me?.id}
-        onChange={(e) => {
-          login(e.target.value)
-          router.push('/home')
-        }}
-      >
-        {options.map((m) => (
-          <option key={m.id} value={m.id} className="bg-paper text-ink">
-            {m.name} · {m.role}
-          </option>
-        ))}
-      </select>
-    </motion.label>
+    <div className="grid min-h-screen place-items-center">
+      <div className="flex items-center gap-3 font-mono text-xs text-ink-3">
+        <span className="h-2 w-2 animate-ping rounded-full bg-accent" /> Loading your treasury…
+      </div>
+    </div>
   )
 }
 
-/** Header, footer and auth guard shared by every signed-in page. */
+/**
+ * Header, footer and sign-in guard for every member page. Anyone who isn't an
+ * active member (signed out, or still finishing sign-up) is sent to /login,
+ * which shows the right next step.
+ */
 export function AppShell({ children }: { children: ReactNode }) {
-  // Before mount there's no store yet. Still render the page segment (its
+  const session = useSessionOptional()
+  const store = useTreasuryOptional()
+  const router = useRouter()
+  const status = session?.status
+  const mustLeave = !!status && status !== 'loading' && status !== 'active'
+
+  useEffect(() => {
+    if (mustLeave) router.replace('/login')
+  }, [mustLeave, router])
+
+  // Before mount there's no session yet. Still render the page segment (its
   // <StoreReady> shows nothing) so Next.js can prerender and validate it.
-  if (!useTreasuryOptional()) return <>{children}</>
+  if (!session) return <>{children}</>
+  if (!store) return <Loading />
   return <SignedInShell>{children}</SignedInShell>
 }
 
 function SignedInShell({ children }: { children: ReactNode }) {
   const { me, settings, logout } = useTreasury()
   const router = useRouter()
-
-  useEffect(() => {
-    if (!me) router.replace('/login')
-  }, [me, router])
-
-  if (!me) return null
   const items = NAV.filter((n) => !n.roles || n.roles.includes(me.role))
-  const signOut = () => {
-    logout()
+  const signOut = async () => {
+    await logout()
     router.replace('/login')
   }
 
@@ -176,15 +164,13 @@ function SignedInShell({ children }: { children: ReactNode }) {
       <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10 sm:py-14">{children}</main>
 
       <footer className="border-t border-ink/12">
-        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-5 py-6 pb-20 font-mono text-[11px] text-ink-3 sm:flex-row sm:justify-between">
+        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-5 py-6 font-mono text-[11px] text-ink-3 sm:flex-row sm:justify-between">
           <span>
             {settings.societyName} · Term {settings.term}
           </span>
-          <span>Records are stored on NEAR testnet and can’t be edited.</span>
+          <span>Past records can’t be edited or deleted.</span>
         </div>
       </footer>
-
-      <DemoSwitcher />
     </div>
   )
 }
@@ -205,14 +191,7 @@ export function Toaster() {
             className="pointer-events-auto relative flex items-start gap-3 overflow-hidden rounded-md bg-ink p-3.5 text-paper shadow-xl"
           >
             <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${t.tone === 'warn' ? 'bg-brick' : t.tone === 'info' ? 'bg-cobalt' : 'bg-accent'}`} />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm">{t.text}</div>
-              {t.tx && (
-                <div className="mt-1 font-mono text-[10.5px] text-paper/50">
-                  tx {shortHash(t.tx)} · {timeAgo(new Date().toISOString())}
-                </div>
-              )}
-            </div>
+            <div className="min-w-0 flex-1 text-sm">{t.text}</div>
             <button onClick={() => dismissToast(t.id)} className="text-paper/40 hover:text-paper">
               <X size={14} />
             </button>
