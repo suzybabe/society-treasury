@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { StoreReady } from "@/state/store";
+import { SessionReady } from "@/state/session";
 import Login from "@/views/Login";
 
 export const metadata: Metadata = { title: "Sign in · Society Treasury" };
 
 export default function Page() {
   return (
-    <StoreReady>
+    <SessionReady>
       <Login />
-    </StoreReady>
+    </SessionReady>
   );
 }
