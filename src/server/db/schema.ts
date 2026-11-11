@@ -27,6 +27,8 @@ export const societies = pgTable('societies', {
   autoApproveLimitCents: integer('auto_approve_limit_cents').notNull().default(0),
   membershipFeeCents: integer('membership_fee_cents').notNull().default(1500),
   openingBalanceCents: integer('opening_balance_cents').notNull().default(0),
+  /** Student votes needed before the student majority counts as one committee vote. */
+  studentQuorum: integer('student_quorum').notNull().default(3),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -88,6 +90,26 @@ export const votes = pgTable(
     txHash: text('tx_hash'),
   },
   // One vote per member per request, enforced by the database.
+  (t) => [primaryKey({ columns: [t.requestId, t.memberId] })],
+)
+
+/**
+ * Votes from members with a pass who aren't on the committee. Together, their
+ * majority counts as one committee vote once enough have voted.
+ */
+export const studentVotes = pgTable(
+  'student_votes',
+  {
+    requestId: integer('request_id')
+      .notNull()
+      .references(() => spendRequests.id),
+    memberId: uuid('member_id')
+      .notNull()
+      .references(() => members.id),
+    choice: voteChoiceEnum('choice').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    txHash: text('tx_hash'),
+  },
   (t) => [primaryKey({ columns: [t.requestId, t.memberId] })],
 )
 
@@ -183,6 +205,7 @@ export type ChainTarget =
   | { kind: 'pass'; memberId: string }
   | { kind: 'request'; requestId: number }
   | { kind: 'vote'; requestId: number; memberId: string }
+  | { kind: 'student_vote'; requestId: number; memberId: string }
   | { kind: 'receipt'; requestId: number }
   | { kind: 'none' }
 
