@@ -34,7 +34,7 @@ const STEPS: { title: string; text: string; icon: StepIconKind }[] = [
   { title: 'Pay the fee', text: 'Cash, card or bank transfer, like you do now. Then send your proof.', icon: 'pay' },
   { title: 'Get your pass', text: 'The treasurer confirms it and your membership pass is minted on NEAR.', icon: 'pass' },
   { title: 'Request', text: 'A committee member asks to spend money, with the amount and the reason.', icon: 'request' },
-  { title: 'Vote', text: 'The committee votes on every request. It needs a majority and at least two approvals.', icon: 'vote' },
+  { title: 'Vote', text: 'The committee votes on every request, and students vote too: their majority counts as one committee vote.', icon: 'vote' },
   { title: 'Check', text: 'Every vote, payment and receipt is visible to all members, for good.', icon: 'check' },
 ]
 

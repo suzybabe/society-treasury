@@ -10,6 +10,7 @@ import { Avatar, ChainChip, Empty, RoleBadge, Section, SpecList, StatusBadge, Vo
 import { dateTime, eur, timeAgo } from '../lib/format'
 import { tally, voteBlock, VOTE_BLOCK_TEXT } from '../lib/rules'
 import type { SpendRequest } from '../lib/types'
+import { StudentVotePanel } from '../components/StudentVotePanel'
 import { useSession } from '../state/session'
 import { memberById, useMe, useTreasury } from '../state/store'
 
@@ -176,9 +177,10 @@ export default function RequestDetail() {
               ) : (
                 <>
                   <div className="py-5">
-                    <VoteMeter yes={t.yes} no={t.no} eligible={t.eligible.length} need={t.need} />
+                    <VoteMeter yes={t.yes} no={t.no} eligible={t.seats} need={t.need} />
                     <div className="mt-2 text-xs text-ink-3">
-                      Needs {t.need} of {t.eligible.length} eligible voters. The coloured mark is the pass line. The requester can’t vote.
+                      Needs {t.need} of {t.seats} votes: {t.eligible.length} committee member{t.eligible.length === 1 ? '' : 's'}
+                      {t.studentSeat ? ' plus the students’ vote' : ''}. The coloured mark is the pass line. The requester can’t vote.
                     </div>
                   </div>
                   <ul>
@@ -220,6 +222,7 @@ export default function RequestDetail() {
                       )
                     })}
                   </ul>
+                  <StudentVotePanel req={req} t={t} me={me} members={members} settings={settings} />
                 </>
               )}
             </Section>

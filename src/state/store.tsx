@@ -31,6 +31,8 @@ export interface TreasuryStore extends TreasuryState {
   toasts: Toast[]
   refresh: () => Promise<unknown>
   castVote: (requestId: string, choice: 'yes' | 'no') => Promise<void>
+  /** Students: vote on a request. Their majority counts as one committee vote. */
+  studentVote: (requestId: string, choice: 'yes' | 'no') => Promise<void>
   submitRequest: (r: NewRequest) => Promise<string | null>
   confirmFee: (memberId: string, method: FeeMethod) => Promise<void>
   rejectFee: (memberId: string, note: string) => Promise<boolean>
@@ -92,6 +94,12 @@ export function TreasuryProvider({ children }: { children: ReactNode }) {
       await act(
         () => api<{ status: string }>(`/api/requests/${requestId}/votes`, { json: { choice } }),
         (r) => (r.status === 'approved' ? `${requestId} approved. It's ready for the treasurer to pay.` : r.status === 'rejected' ? `${requestId} rejected by the committee.` : 'Vote recorded'),
+      )
+    },
+    studentVote: async (requestId, choice) => {
+      await act(
+        () => api<{ status: string }>(`/api/requests/${requestId}/student-votes`, { json: { choice } }),
+        (r) => (r.status === 'approved' ? `${requestId} approved, with the student vote counted.` : r.status === 'rejected' ? `${requestId} rejected, with the student vote counted.` : 'Your vote is recorded'),
       )
     },
     submitRequest: async (r) => {

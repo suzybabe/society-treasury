@@ -9,13 +9,15 @@ import { CountUp, EASE, int, Reveal, Stagger, StaggerItem } from '../components/
 import { LedgerHead, RequestRow } from '../components/RequestRow'
 import { ChainChip, Empty, Figure, PageHeader, Section, SpecList } from '../components/ui'
 import { eur, longDate, passNo, shortDate, timeAgo } from '../lib/format'
-import { isCommittee, voteBlock } from '../lib/rules'
+import { canStudentVote, isCommittee, voteBlock } from '../lib/rules'
 import { useMe, useTreasury } from '../state/store'
 
 export default function Home() {
   const me = useMe()
   const { settings, totals, requests, events, activity, checkedIn, checkIn } = useTreasury()
   const needsMyVote = requests.filter((r) => voteBlock(r, me) === null)
+  // Students vote too: their majority counts as one committee vote.
+  const openForStudentVote = isCommittee(me.role) ? [] : requests.filter((r) => canStudentVote(r, me))
 
   return (
     <>
@@ -27,7 +29,9 @@ export default function Home() {
             ? needsMyVote.length
               ? `${needsMyVote.length} request${needsMyVote.length > 1 ? 's need' : ' needs'} your vote.`
               : 'You’ve voted on everything that’s open.'
-            : 'Your pass, and where the society’s money is going.'
+            : openForStudentVote.length
+              ? `${openForStudentVote.length} request${openForStudentVote.length > 1 ? 's are' : ' is'} open for your vote. Students’ majority counts as one committee vote.`
+              : 'Your pass, and where the society’s money is going.'
         }
         actions={
           isCommittee(me.role) && needsMyVote.length > 0 ? (
@@ -80,6 +84,18 @@ export default function Home() {
           <p className="mt-4 text-sm text-ink-3">Show the QR code at the door to check in to events.</p>
         </Reveal>
       </div>
+
+      {openForStudentVote.length > 0 && (
+        <Reveal className="mt-16">
+          <Section title="Open for your vote" right={<span className="font-mono text-xs text-ink-3">{openForStudentVote.length} open</span>}>
+            <p className="py-3 text-sm text-ink-2">Students vote on spending too. Once enough students have voted, your majority counts as one committee vote.</p>
+            <LedgerHead compact />
+            {openForStudentVote.map((r) => (
+              <RequestRow key={r.id} req={r} compact />
+            ))}
+          </Section>
+        </Reveal>
+      )}
 
       {/* Treasury figures */}
       <Reveal className="mt-16">

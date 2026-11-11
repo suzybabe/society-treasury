@@ -9,7 +9,7 @@ import { CountUp, EASE, int, Reveal } from '../components/motion'
 import { LedgerHead, RequestRow } from '../components/RequestRow'
 import { Empty, Figure, PageHeader, Section, VoteMeter } from '../components/ui'
 import { eur, timeAgo } from '../lib/format'
-import { isCommittee, MIN_ELIGIBLE_VOTERS, requiredYes, tally, voteBlock } from '../lib/rules'
+import { hasStudentSeat, isCommittee, MIN_VOTING_SEATS, requiredYes, tally, voteBlock, votingSeats } from '../lib/rules'
 import { CATEGORIES, type Category } from '../lib/types'
 import { memberById, useMe, useTreasury } from '../state/store'
 
@@ -67,10 +67,11 @@ function NewRequestForm() {
   const [busy, setBusy] = useState(false)
 
   const n = Number(amount)
-  const eligible = members.filter((m) => isCommittee(m.role) && m.id !== me.id).length
-  const enoughVoters = eligible >= MIN_ELIGIBLE_VOTERS
+  const seats = votingSeats(me.id, members, settings)
+  const studentSeat = hasStudentSeat(members, settings)
+  const enoughVoters = seats >= MIN_VOTING_SEATS
   const valid = title.trim().length > 2 && n > 0 && enoughVoters
-  const need = requiredYes(eligible, settings.approvalPercent)
+  const need = requiredYes(seats, settings.approvalPercent)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -107,10 +108,10 @@ function NewRequestForm() {
       </label>
 
       <div className="rounded-md bg-ink/[0.05] p-3 text-sm text-ink-2">
-        Every request goes to a committee vote. This one needs <span className="font-semibold text-ink">{need} of {eligible}</span> yes votes, and you can’t vote on your own request.
+        Every request goes to a vote. This one needs <span className="font-semibold text-ink">{need} of {seats}</span> yes votes{studentSeat ? ', counting the students’ vote as one' : ''}, and you can’t vote on your own request.
         {!enoughVoters && (
           <span className="mt-1 block text-brick">
-            You need at least 3 committee members before requests can be voted on, because nobody can approve spending alone. The president can add them in Settings.
+            Not enough people can vote on this yet, because nobody can approve spending alone. Add committee members in Settings, or approve at least {settings.studentQuorum} students so their vote counts.
           </span>
         )}
       </div>

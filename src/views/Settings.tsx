@@ -81,6 +81,9 @@ export default function Settings() {
           <span className="font-semibold text-ink">{need} yes votes</span>. At least 2 are always needed, so nobody can approve alone.
         </p>
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Student quorum" hint="Student votes needed before their majority counts as one committee vote.">
+            <input className="input font-mono" type="number" min={1} max={100} step={1} value={draft.studentQuorum} onChange={(e) => set('studentQuorum', Math.min(100, Math.max(1, Math.round(Number(e.target.value)) || 1)))} />
+          </Field>
           <Field label="Membership fee (€)" hint="Applies to new passes only.">
             <input className="input font-mono" type="number" min={0} step={1} value={draft.membershipFee} onChange={(e) => set('membershipFee', Math.max(0, Number(e.target.value)))} />
           </Field>
