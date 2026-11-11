@@ -270,6 +270,17 @@ impl Treasury {
         self.settings = settings;
     }
 
+    /// Contract account only (the app): appoint a co-president named by the
+    /// society's founders. Issues them a pass (fee waived) if they don't have one.
+    pub fn add_president(&mut self, account_id: AccountId) {
+        require!(env::predecessor_account_id() == env::current_account_id(), "Only the treasury app can add presidents");
+        if self.pass_by_owner.get(&account_id).is_none() {
+            self.mint_pass(account_id.clone(), FeeMethod::Waived, 0, env::current_account_id());
+        }
+        self.roles.insert(account_id.clone(), Role::President);
+        emit("role_changed", json!({ "account_id": account_id, "role": Role::President, "by": env::current_account_id() }));
+    }
+
     // ---------- Spending ----------
 
     /// Committee only: ask to spend money. Under the auto-approve limit it's
@@ -680,6 +691,29 @@ mod tests {
         assert_eq!(t.get_society().term, "2027/28");
         assert!(t.get_roles().contains(&(acct("c2.testnet"), Role::President)));
         assert!(!t.get_roles().iter().any(|(a, _)| *a == acct("pres.testnet")));
+    }
+
+    #[test]
+    fn app_can_add_a_co_president() {
+        let mut t = full_committee();
+        as_caller(CONTRACT);
+        t.add_president(acct("susan.testnet"));
+        let pass = t.get_pass(acct("susan.testnet")).unwrap();
+        assert_eq!(pass.fee_method, FeeMethod::Waived);
+        let roles = t.get_roles();
+        assert!(roles.contains(&(acct("susan.testnet"), Role::President)));
+        assert!(roles.contains(&(acct("pres.testnet"), Role::President)), "existing president keeps their role");
+        // An existing member can be promoted without a second pass.
+        t.add_president(acct("c1.testnet"));
+        assert_eq!(t.get_stats().passes, 7);
+    }
+
+    #[test]
+    #[should_panic(expected = "Only the treasury app can add presidents")]
+    fn only_the_contract_account_can_add_presidents() {
+        let mut t = full_committee();
+        as_caller("pres.testnet");
+        t.add_president(acct("friend.testnet"));
     }
 
     #[test]

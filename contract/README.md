@@ -24,6 +24,7 @@ Members can call the contract with their own NEAR account. The contract account 
 | `issue_pass(member, fee_method, fee_cents)` | treasurer | Mints a membership pass (NFT) |
 | `set_role(account_id, role)` | president | Gives or removes a committee role. One treasurer at a time |
 | `handover(new_president, new_term)` | president | Hands the presidency to the next committee |
+| `add_president(account_id)` | contract account (the app) | Appoints a co-president, issuing a pass if needed |
 | `update_settings(settings)` | president | Changes the voting rules and fee |
 | `create_request(app_ref, title, category, amount_cents)` | committee | Asks to spend money |
 | `vote(request_id, approve)` | committee | Votes on a request |
