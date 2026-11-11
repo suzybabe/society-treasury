@@ -119,7 +119,7 @@ export async function buildState(me: MemberRow): Promise<TreasuryState> {
     d.select({ eventId: checkins.eventId, count: sql<number>`count(*)::int` }).from(checkins).groupBy(checkins.eventId),
     d.select({ eventId: checkins.eventId }).from(checkins).where(eq(checkins.memberId, me.id)),
     d.query.activity.findMany({ orderBy: desc(activity.createdAt), limit: 50 }),
-    me.role === 'treasurer' ? d.query.members.findMany({ where: eq(members.status, 'pending'), orderBy: asc(members.createdAt) }) : Promise.resolve([]),
+    me.role === 'treasurer' || me.role === 'president' ? d.query.members.findMany({ where: eq(members.status, 'pending'), orderBy: asc(members.createdAt) }) : Promise.resolve([]),
   ])
 
   // Submissions awaiting review, newest first, so the first one per member wins.

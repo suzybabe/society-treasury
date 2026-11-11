@@ -136,7 +136,7 @@ export interface TreasuryState {
   totals: Totals
   members: Member[]
   requests: SpendRequest[]
-  /** Only filled for the treasurer. */
+  /** Sign-ups waiting for approval. Filled for the treasurer (who approves) and president (read-only). */
   payments: FeePayment[]
   events: SocietyEvent[]
   activity: Activity[]
