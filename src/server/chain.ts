@@ -1,5 +1,5 @@
 import 'server-only'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import { after } from 'next/server'
 import { db, schema, type Tx } from './db'
 import type { ChainTarget } from './db/schema'
@@ -43,54 +43,69 @@ export function syncChainSoon() {
 
 let running = false
 
+/** Postgres advisory lock shared by every instance running the worker. */
+const WORKER_LOCK = 4_217_001
+
 /**
  * Sends pending jobs to NEAR one at a time, oldest first, so a vote never
  * lands before its request. Network errors stop the run and are retried
  * later (keeping the order); contract rejections are recorded and skipped.
- * One Railway instance runs this, so an in-process guard is enough.
  */
 export async function processChainJobs(): Promise<void> {
   if (running || !nearConfigured()) return
   running = true
   try {
-    for (;;) {
-      const job = await db().query.chainJobs.findFirst({ where: eq(chainJobs.status, 'pending'), orderBy: asc(chainJobs.id) })
-      if (!job) return
-
-      // Votes and receipts need the request's id in the contract.
-      const args = { ...job.args }
-      if (job.target.kind === 'vote' || job.target.kind === 'student_vote' || job.target.kind === 'receipt') {
-        const request = await db().query.spendRequests.findFirst({ where: eq(spendRequests.id, job.target.requestId), columns: { chainId: true } })
-        if (request?.chainId == null) {
-          await markFailed(job.id, null, 'The request was never recorded on NEAR')
-          continue
-        }
-        args.request_id = request.chainId
-      }
-
-      const result = await callContract(job.method, args)
-      if (result.ok) {
-        await db().transaction(async (tx) => {
-          await tx.update(chainJobs).set({ status: 'done', txHash: result.txHash, error: null, doneAt: new Date(), attempts: job.attempts + 1 }).where(eq(chainJobs.id, job.id))
-          await applyTarget(tx, job.target, result.txHash, result.value)
-          if (job.activityId) await tx.update(activity).set({ txHash: result.txHash }).where(eq(activity.id, job.activityId))
-        })
-      } else if (result.permanent || job.attempts + 1 >= MAX_ATTEMPTS) {
-        console.error(`chain job ${job.id} (${job.method}) failed: ${result.error}`)
-        await markFailed(job.id, result.txHash, result.error)
-      } else {
-        // Temporary trouble: keep the job and stop here so later jobs stay in order.
-        await db().update(chainJobs).set({ attempts: job.attempts + 1, error: result.error }).where(eq(chainJobs.id, job.id))
-        return
-      }
-    }
+    while (await processNextJob()) {}
   } finally {
     running = false
   }
 }
 
-async function markFailed(id: number, txHash: string | null, error: string) {
-  await db().update(chainJobs).set({ status: 'failed', txHash, error, doneAt: new Date() }).where(eq(chainJobs.id, id))
+/**
+ * Sends the oldest pending job inside a transaction that holds the worker
+ * lock. During a deploy the old and new containers both run the worker, and
+ * without the lock both could send the same job. Returns false when there is
+ * nothing more to do for now.
+ */
+async function processNextJob(): Promise<boolean> {
+  return db().transaction(async (tx) => {
+    const [lock] = await tx.execute<{ locked: boolean }>(sql`select pg_try_advisory_xact_lock(${WORKER_LOCK}) as locked`)
+    if (!lock?.locked) return false
+
+    const job = await tx.query.chainJobs.findFirst({ where: eq(chainJobs.status, 'pending'), orderBy: asc(chainJobs.id) })
+    if (!job) return false
+
+    // Votes and receipts need the request's id in the contract.
+    const args = { ...job.args }
+    if (job.target.kind === 'vote' || job.target.kind === 'student_vote' || job.target.kind === 'receipt') {
+      const request = await tx.query.spendRequests.findFirst({ where: eq(spendRequests.id, job.target.requestId), columns: { chainId: true } })
+      if (request?.chainId == null) {
+        await markFailed(tx, job.id, null, 'The request was never recorded on NEAR')
+        return true
+      }
+      args.request_id = request.chainId
+    }
+
+    const result = await callContract(job.method, args)
+    if (result.ok) {
+      await tx.update(chainJobs).set({ status: 'done', txHash: result.txHash, error: null, doneAt: new Date(), attempts: job.attempts + 1 }).where(eq(chainJobs.id, job.id))
+      await applyTarget(tx, job.target, result.txHash, result.value)
+      if (job.activityId) await tx.update(activity).set({ txHash: result.txHash }).where(eq(activity.id, job.activityId))
+      return true
+    }
+    if (result.permanent || job.attempts + 1 >= MAX_ATTEMPTS) {
+      console.error(`chain job ${job.id} (${job.method}) failed: ${result.error}`)
+      await markFailed(tx, job.id, result.txHash, result.error)
+      return true
+    }
+    // Temporary trouble: keep the job and stop here so later jobs stay in order.
+    await tx.update(chainJobs).set({ attempts: job.attempts + 1, error: result.error }).where(eq(chainJobs.id, job.id))
+    return false
+  })
+}
+
+async function markFailed(tx: Tx, id: number, txHash: string | null, error: string) {
+  await tx.update(chainJobs).set({ status: 'failed', txHash, error, doneAt: new Date() }).where(eq(chainJobs.id, id))
 }
 
 async function applyTarget(tx: Tx, target: ChainTarget, txHash: string, value: unknown) {
