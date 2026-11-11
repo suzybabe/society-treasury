@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { requireMember } from "@/server/auth";
+import { requireFeeApprover } from "@/server/auth";
 import { db, schema } from "@/server/db";
 import { ApiError, body, ok, route } from "@/server/http";
 
@@ -8,11 +8,12 @@ const { feeProofs } = schema;
 const rejectSchema = z.object({ note: z.string().trim().min(3, "Say what's wrong so they can fix it").max(300) });
 
 /**
- * Treasurer only: reject a student's proof of payment with a reason. The
+ * Treasurer (or the president until a treasurer is assigned): reject a
+ * student's proof of payment with a reason. The
  * submission stays on record and the student can submit again.
  */
 export const POST = route(async (req: Request, ctx: RouteContext<"/api/members/[id]/reject-fee">) => {
-  const me = await requireMember(req, ["treasurer"]);
+  const me = await requireFeeApprover(req);
   const { id } = await ctx.params;
   const { note } = rejectSchema.parse(await body(req));
 

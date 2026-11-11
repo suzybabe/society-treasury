@@ -6,7 +6,7 @@ import { fileResponse } from "@/server/files";
 import { ApiError, route } from "@/server/http";
 
 /**
- * A proof-of-payment file. Visible only to the treasurer and the student who
+ * A proof-of-payment file. Visible only to the treasurer, president and the student who
  * uploaded it, since it may contain bank details.
  */
 export const GET = route(async (req: Request, ctx: RouteContext<"/api/fee-proofs/[id]">) => {
@@ -16,7 +16,7 @@ export const GET = route(async (req: Request, ctx: RouteContext<"/api/fee-proofs
   if (!id.success) throw new ApiError(404, "No such file.");
 
   const proof = await db().query.feeProofs.findFirst({ where: eq(schema.feeProofs.id, id.data) });
-  const isTreasurer = member.status === "active" && member.role === "treasurer";
+  const isTreasurer = member.status === "active" && (member.role === "treasurer" || member.role === "president");
   if (!proof || (proof.memberId !== member.id && !isTreasurer)) throw new ApiError(404, "No such file.");
   return fileResponse(proof);
 });

@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { requireMember } from "@/server/auth";
+import { requireFeeApprover } from "@/server/auth";
 import { db, schema } from "@/server/db";
 import { ApiError, body, ok, route } from "@/server/http";
 import { getSociety, logActivity, nextPassNumber } from "@/server/society";
@@ -9,11 +9,12 @@ const { members, societies, feeProofs } = schema;
 const confirmSchema = z.object({ method: z.enum(["cash", "card", "bank"]) });
 
 /**
- * Treasurer only: confirm a student paid their fee and issue their pass.
+ * Treasurer (or the president until a treasurer is assigned): confirm a
+ * student paid their fee and issue their pass.
  * (Minting the NFT on NEAR comes with the contract.)
  */
 export const POST = route(async (req: Request, ctx: RouteContext<"/api/members/[id]/confirm-fee">) => {
-  const me = await requireMember(req, ["treasurer"]);
+  const me = await requireFeeApprover(req);
   const { id } = await ctx.params;
   const { method } = confirmSchema.parse(await body(req));
 
