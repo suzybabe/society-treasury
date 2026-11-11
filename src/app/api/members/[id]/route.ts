@@ -1,4 +1,5 @@
 import { and, eq, ne } from "drizzle-orm";
+import { enqueueChain, syncChainSoon } from "@/server/chain";
 import { z } from "zod";
 import { requireMember } from "@/server/auth";
 import { db, schema } from "@/server/db";
@@ -24,7 +25,11 @@ export const PATCH = route(async (req: Request, ctx: RouteContext<"/api/members/
       await tx.update(members).set({ role: "committee" }).where(and(eq(members.role, "treasurer"), ne(members.id, id)));
     }
     await tx.update(members).set({ role }).where(eq(members.id, id));
-    await logActivity(tx, "settings", `${target.name ?? target.email} is now ${role}`, me.id);
+    const activityId = await logActivity(tx, "settings", `${target.name ?? target.email} is now ${role}`, me.id);
+    if (target.nearAccountId) {
+      await enqueueChain(tx, { method: "set_role", args: { account_id: target.nearAccountId, role: role === "student" ? null : role }, onBehalfOf: me.nearAccountId, activityId });
+    }
   });
+  syncChainSoon();
   return ok();
 });

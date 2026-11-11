@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { enqueueChain, syncChainSoon } from "@/server/chain";
 import { COMMITTEE_ROLES } from "@/lib/rules";
 import { CATEGORIES } from "@/lib/types";
 import { requireMember } from "@/server/auth";
@@ -38,9 +39,17 @@ export const POST = route(async (req: Request) => {
       })
       .returning();
     const ref = requestRef(row.id);
-    await logActivity(tx, "request", `${me.name ?? me.email} requested €${input.amount.toFixed(2)} for ${input.title}`, me.id);
+    const activityId = await logActivity(tx, "request", `${me.name ?? me.email} requested €${input.amount.toFixed(2)} for ${input.title}`, me.id);
+    await enqueueChain(tx, {
+      method: "create_request",
+      args: { app_ref: ref, title: input.title, category: input.category, amount_cents: amountCents },
+      onBehalfOf: me.nearAccountId,
+      target: { kind: "request", requestId: row.id },
+      activityId,
+    });
     if (auto) await logActivity(tx, "decision", `${ref} auto-approved (under €${(society.autoApproveLimitCents / 100).toFixed(2)})`, me.id);
     return ref;
   });
+  syncChainSoon();
   return ok({ id }, 201);
 });

@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { enqueueChain, syncChainSoon } from "@/server/chain";
 import { z } from "zod";
 import { COMMITTEE_ROLES, decide } from "@/lib/rules";
 import type { Member, Settings, SpendRequest } from "@/lib/types";
@@ -40,12 +41,15 @@ export const POST = route(async (req: Request, ctx: RouteContext<"/api/requests/
     );
 
     const ref = requestRef(requestId);
-    await logActivity(tx, "vote", `${me.name ?? me.email} voted ${choice.toUpperCase()} on ${ref}`, me.id);
+    const activityId = await logActivity(tx, "vote", `${me.name ?? me.email} voted ${choice.toUpperCase()} on ${ref}`, me.id);
+    // request_id (the contract's id) is filled in by the worker once the request is on NEAR.
+    await enqueueChain(tx, { method: "vote", args: { approve: choice === "yes" }, onBehalfOf: me.nearAccountId, target: { kind: "vote", requestId, memberId: me.id }, activityId });
     if (outcome !== "voting") {
       await tx.update(spendRequests).set({ status: outcome, decidedAt: new Date() }).where(eq(spendRequests.id, requestId));
       await logActivity(tx, "decision", `${ref} ${outcome} by committee vote`, me.id);
     }
     return outcome;
   });
+  syncChainSoon();
   return ok({ status });
 });

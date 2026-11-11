@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { enqueueChain, syncChainSoon } from "@/server/chain";
 import { z } from "zod";
 import { requireFeeApprover } from "@/server/auth";
 import { db, schema } from "@/server/db";
@@ -37,8 +38,18 @@ export const POST = route(async (req: Request, ctx: RouteContext<"/api/members/[
       .update(feeProofs)
       .set({ status: "accepted", reviewedBy: me.id, reviewedAt: new Date() })
       .where(and(eq(feeProofs.memberId, id), eq(feeProofs.status, "reviewing")));
-    await logActivity(tx, "pass", `Fee confirmed (${method}). Pass #${String(pass).padStart(4, "0")} issued to ${target.name ?? target.email}`, me.id);
+    const activityId = await logActivity(tx, "pass", `Fee confirmed (${method}). Pass #${String(pass).padStart(4, "0")} issued to ${target.name ?? target.email}`, me.id);
+    if (target.nearAccountId) {
+      await enqueueChain(tx, {
+        method: "issue_pass",
+        args: { member: target.nearAccountId, fee_method: method, fee_cents: society.membershipFeeCents },
+        onBehalfOf: me.nearAccountId,
+        target: { kind: "pass", memberId: id },
+        activityId,
+      });
+    }
     return pass;
   });
+  syncChainSoon();
   return ok({ passNumber });
 });

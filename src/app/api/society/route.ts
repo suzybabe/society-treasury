@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { enqueueChain, syncChainSoon } from "@/server/chain";
 import { z } from "zod";
 import { requireMember } from "@/server/auth";
 import { db, schema } from "@/server/db";
@@ -34,8 +35,15 @@ export const PATCH = route(async (req: Request) => {
       })
       .where(eq(schema.societies.id, society.id))
       .returning();
-    await logActivity(tx, "settings", `Rules updated: more than ${s.approvalPercent}% to pass, auto-approve under €${s.autoApproveLimit.toFixed(2)}`, me.id);
+    const activityId = await logActivity(tx, "settings", `Rules updated: more than ${s.approvalPercent}% to pass, auto-approve under €${s.autoApproveLimit.toFixed(2)}`, me.id);
+    await enqueueChain(tx, {
+      method: "update_settings",
+      args: { settings: { approval_percent: s.approvalPercent, auto_approve_limit_cents: toCents(s.autoApproveLimit), membership_fee_cents: toCents(s.membershipFee) } },
+      onBehalfOf: me.nearAccountId,
+      activityId,
+    });
     return row;
   });
+  syncChainSoon();
   return ok({ settings: toSettings(updated) });
 });

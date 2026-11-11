@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { enqueueChain, syncChainSoon } from "@/server/chain";
 import { requireMember } from "@/server/auth";
 import { db, schema } from "@/server/db";
 import { readUpload } from "@/server/files";
@@ -24,7 +25,9 @@ export const POST = route(async (req: Request, ctx: RouteContext<"/api/requests/
     if (request.status !== "approved" && request.status !== "auto") throw new ApiError(409, "Only approved requests can be marked Spent.");
     await tx.insert(receipts).values({ requestId, ...upload, uploadedBy: me.id });
     await tx.update(spendRequests).set({ status: "spent" }).where(eq(spendRequests.id, requestId));
-    await logActivity(tx, "spent", `Receipt uploaded for ${requestRef(requestId)}, marked Spent`, me.id);
+    const activityId = await logActivity(tx, "spent", `Receipt uploaded for ${requestRef(requestId)}, marked Spent`, me.id);
+    await enqueueChain(tx, { method: "mark_spent", args: { receipt_sha256: upload.sha256 }, onBehalfOf: me.nearAccountId, target: { kind: "receipt", requestId }, activityId });
   });
+  syncChainSoon();
   return ok({ sha256: upload.sha256 }, 201);
 });

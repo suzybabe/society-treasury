@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { enqueueChain, syncChainSoon } from "@/server/chain";
 import { z } from "zod";
 import { requireMember } from "@/server/auth";
 import { db, schema } from "@/server/db";
@@ -29,7 +30,11 @@ export const POST = route(async (req: Request) => {
     await tx.update(members).set({ role: "president" }).where(eq(members.id, next.id));
     await tx.update(members).set({ role: "student" }).where(eq(members.id, me.id));
     await tx.update(societies).set({ term }).where(eq(societies.id, society.id));
-    await logActivity(tx, "settings", `Handover: ${next.name ?? next.email} is president for ${term}. All records carried over.`, me.id);
+    const activityId = await logActivity(tx, "settings", `Handover: ${next.name ?? next.email} is president for ${term}. All records carried over.`, me.id);
+    if (next.nearAccountId) {
+      await enqueueChain(tx, { method: "handover", args: { new_president: next.nearAccountId, new_term: term }, onBehalfOf: me.nearAccountId, activityId });
+    }
   });
+  syncChainSoon();
   return ok();
 });
