@@ -9,6 +9,7 @@ import { shortHash } from '../lib/chain'
 import type { ActivityKind, Role } from '../lib/types'
 import { useSessionOptional } from '../state/session'
 import { useTreasury, useTreasuryOptional } from '../state/store'
+import { SiteFooter } from './SiteFooter'
 import { ThemeToggle } from './ThemeToggle'
 import { Avatar, Logo, RoleBadge } from './ui'
 
@@ -220,14 +221,10 @@ function SignedInShell({ children }: { children: ReactNode }) {
 
         <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10 sm:py-14 lg:px-10">{children}</main>
 
-        <footer className="border-t border-ink/12">
-          <div className="mx-auto flex max-w-6xl flex-col gap-1 px-5 py-6 pb-24 font-mono text-[11px] text-ink-3 sm:flex-row sm:justify-between lg:px-10 lg:pb-6">
-            <span>
-              {settings.societyName} · Term {settings.term}
-            </span>
-            <span>Past records can’t be edited or deleted.</span>
-          </div>
-        </footer>
+        {/* Extra bottom padding on phones so the tab bar doesn't cover it */}
+        <div className="pb-16 lg:pb-0">
+          <SiteFooter societyName={settings.societyName} compact />
+        </div>
       </div>
 
       {/* Bottom tabs (phones and tablets) */}
