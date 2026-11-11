@@ -23,7 +23,8 @@ export const societies = pgTable('societies', {
   shortName: text('short_name').notNull(),
   term: text('term').notNull(),
   approvalPercent: integer('approval_percent').notNull().default(50),
-  autoApproveLimitCents: integer('auto_approve_limit_cents').notNull().default(2000),
+  /** No longer used: every request goes to a committee vote. */
+  autoApproveLimitCents: integer('auto_approve_limit_cents').notNull().default(0),
   membershipFeeCents: integer('membership_fee_cents').notNull().default(1500),
   openingBalanceCents: integer('opening_balance_cents').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

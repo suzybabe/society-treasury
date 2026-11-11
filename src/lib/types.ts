@@ -140,7 +140,6 @@ export interface Settings {
   shortName: string
   term: string
   approvalPercent: number
-  autoApproveLimit: number
   membershipFee: number
   openingBalance: number
 }

@@ -12,7 +12,6 @@ const settingsSchema = z.object({
   societyName: z.string().trim().min(2).max(80),
   shortName: z.string().trim().min(2).max(10).transform((s) => s.toUpperCase()),
   approvalPercent: z.number().int().min(50).max(90),
-  autoApproveLimit: euros(1000),
   membershipFee: euros(1000),
   openingBalance: euros(1_000_000),
 });
@@ -29,16 +28,15 @@ export const PATCH = route(async (req: Request) => {
         name: s.societyName,
         shortName: s.shortName,
         approvalPercent: s.approvalPercent,
-        autoApproveLimitCents: toCents(s.autoApproveLimit),
         membershipFeeCents: toCents(s.membershipFee),
         openingBalanceCents: toCents(s.openingBalance),
       })
       .where(eq(schema.societies.id, society.id))
       .returning();
-    const activityId = await logActivity(tx, "settings", `Rules updated: more than ${s.approvalPercent}% to pass, auto-approve under €${s.autoApproveLimit.toFixed(2)}`, me.id);
+    const activityId = await logActivity(tx, "settings", `Rules updated: more than ${s.approvalPercent}% of eligible votes to pass, fee €${s.membershipFee.toFixed(2)}`, me.id);
     await enqueueChain(tx, {
       method: "update_settings",
-      args: { settings: { approval_percent: s.approvalPercent, auto_approve_limit_cents: toCents(s.autoApproveLimit), membership_fee_cents: toCents(s.membershipFee) } },
+      args: { settings: { approval_percent: s.approvalPercent, auto_approve_limit_cents: 0, membership_fee_cents: toCents(s.membershipFee) } },
       onBehalfOf: me.nearAccountId,
       activityId,
     });

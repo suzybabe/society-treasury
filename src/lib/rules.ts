@@ -25,10 +25,14 @@ export function tally(req: SpendRequest, members: Member[], settings: Settings) 
   return { eligible, need, yes, no, remaining: eligible.length - yes - no }
 }
 
+/** A request needs at least two people who can vote on it, so 3 committee members in total. */
+export const MIN_ELIGIBLE_VOTERS = 2
+
 export function decide(req: SpendRequest, members: Member[], settings: Settings): Status {
   const { eligible, need, yes, no } = tally(req, members, settings)
   if (yes >= need) return 'approved'
-  if (no > eligible.length - need) return 'rejected'
+  // Matches the contract exactly (it uses a saturating subtraction).
+  if (no > Math.max(0, eligible.length - need)) return 'rejected'
   return 'voting'
 }
 

@@ -29,7 +29,6 @@ export const toSettings = (s: SocietyRow): Settings => ({
   shortName: s.shortName,
   term: s.term,
   approvalPercent: s.approvalPercent,
-  autoApproveLimit: toEuros(s.autoApproveLimitCents),
   membershipFee: toEuros(s.membershipFeeCents),
   openingBalance: toEuros(s.openingBalanceCents),
 })
