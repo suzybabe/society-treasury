@@ -7,7 +7,9 @@ import { SessionProvider } from '../state/session'
 import { StoreReady, TreasuryProvider } from '../state/store'
 import { Toaster } from './AppShell'
 
-const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID
+// The Privy app ID is public (it ships in the page), so it has a default and
+// the app runs without a .env.local.
+const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || 'cmkzerpay007mld0chxqzp9sc'
 const PRIVY_CLIENT_ID = process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID || undefined
 const subscribeNoop = () => () => {}
 

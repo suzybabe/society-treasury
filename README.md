@@ -154,7 +154,20 @@ The backend key can only call the contract's seven record-keeping methods, with 
 - A [Privy](https://dashboard.privy.io) app with **email** login enabled
 - A Postgres database (we use Railway's)
 
-### Run locally
+### Run locally against the live backend (no .env.local)
+
+The quickest way to work on the frontend. There are no keys to set up: the app uses the database, sign-in and NEAR contract that are already deployed on Railway.
+
+```bash
+git clone https://github.com/suzybabe/society-treasury.git
+cd society-treasury
+npm install
+npm run dev
+```
+
+Then open [http://localhost:3000](http://localhost:3000) and sign in with your email. With no `.env.local`, the dev server sends every `/api` call to https://web-production-b3f76b45.up.railway.app (set `REMOTE_API_URL` to use another backend). Anything you do is real: it lands in the shared database and on NEAR testnet.
+
+### Run locally with your own database
 
 ```bash
 git clone https://github.com/suzybabe/society-treasury.git
