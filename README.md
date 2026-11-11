@@ -106,6 +106,10 @@ Society Treasury is a transparent record-keeping and voting app for student soci
 
 Deployed on testnet at [`society-treasury.testnet`](https://testnet.nearblocks.io/address/society-treasury.testnet). It stores membership passes (non-transferable NFTs), committee roles, voting rules, and every spending request with its votes and receipt hash, and enforces the same rules as the app. Source, methods, and build and deploy steps are in [`contract/`](contract/README.md).
 
+**Members never pay gas.** The backend records every pass, role change, settings change, request, vote and receipt on the contract *on behalf of* the member who acted, signing with a function-call key on the contract account. The contract account pays the fees, and the contract still checks every rule against that member. Each action is queued in the database in the same transaction as the record (the `chain_jobs` table), then sent to NEAR in order; network errors are retried every 30 seconds. The app links each record to its NEAR transaction, and `/api/health` shows how many are pending or failed.
+
+The backend key can only call the contract's seven record-keeping methods, with a 5 NEAR gas allowance. It can't move funds, add keys or redeploy the contract. To top up the allowance, add a new function-call key and swap `NEAR_RECORDER_PRIVATE_KEY` on Railway.
+
 ---
 
 ## Tech stack
