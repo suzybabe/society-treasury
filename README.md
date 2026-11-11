@@ -102,6 +102,10 @@ Society Treasury is a transparent record-keeping and voting app for student soci
 - **Easy handover:** the full history stays when the committee changes each year.
 - **Student-friendly:** an embedded wallet and email login mean students never deal with crypto directly.
 
+### The contract
+
+Deployed on testnet at [`society-treasury.testnet`](https://testnet.nearblocks.io/address/society-treasury.testnet). It stores membership passes (non-transferable NFTs), committee roles, voting rules, and every spending request with its votes and receipt hash, and enforces the same rules as the app. Source, methods, and build and deploy steps are in [`contract/`](contract/README.md).
+
 ---
 
 ## Tech stack
