@@ -35,7 +35,7 @@ Society Treasury is a transparent record-keeping and voting app for student soci
 2. **Join:** a student pays the membership fee normally (cash, card or bank transfer).
 3. **Issue pass:** the treasurer confirms the payment in the app, and the student receives a **membership NFT pass**.
 4. **Request:** a committee member creates a spending request, for example "€40 pizza for Hack Night".
-5. **Vote:** the committee votes. Small amounts under a set limit (for example €20) are auto-approved.
+5. **Vote:** the committee votes on every request, whatever the amount. It needs a majority of eligible votes and at least two approvals, so a society needs at least 3 committee members.
 6. **Spend:** if approved, the treasurer pays from the society's normal bank account.
 7. **Proof:** the treasurer uploads the receipt and marks the request as **Spent**.
 8. **Transparency:** every step is recorded on NEAR and visible to all members.
@@ -55,7 +55,7 @@ Society Treasury is a transparent record-keeping and voting app for student soci
 
 ### President (admin)
 - Add or remove committee members
-- Set the rules: votes needed and the auto-approve limit
+- Set the rules: the share of votes needed to pass
 - Hand over control to the next committee
 - Create spending requests and vote
 
@@ -131,7 +131,7 @@ The backend key can only call the contract's seven record-keeping methods, with 
 - [ ] Treasurer confirms payment and issues membership NFT pass
 - [x] Create spending requests
 - [x] Committee voting (majority, no self-voting)
-- [x] Auto-approve under a spending limit
+- [x] Every request goes to a committee vote (at least two approvals)
 - [x] Upload receipt and mark as Spent
 - [x] Public spending log and totals
 
