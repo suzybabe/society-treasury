@@ -15,6 +15,13 @@
       "when": 1794384506459,
       "tag": "0001_fee_proofs",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794389602118,
+      "tag": "0002_chain_jobs",
+      "breakpoints": true
     }
   ]
 }

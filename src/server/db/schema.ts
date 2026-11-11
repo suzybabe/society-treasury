@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, customType, index, integer, pgEnum, pgTable, primaryKey, serial, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { check, customType, index, integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 
 // Money is stored in integer cents to avoid floating-point rounding.
 // Records are append-only: the API has no edit or delete for requests, votes,
@@ -44,6 +44,8 @@ export const members = pgTable(
     feeAmountCents: integer('fee_amount_cents').notNull().default(0),
     feeConfirmedAt: timestamp('fee_confirmed_at', { withTimezone: true }),
     feeConfirmedBy: uuid('fee_confirmed_by'),
+    /** NEAR transaction that minted their membership pass. */
+    passTxHash: text('pass_tx_hash'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('members_email_idx').on(t.email)],
@@ -65,6 +67,8 @@ export const spendRequests = pgTable(
     decidedAt: timestamp('decided_at', { withTimezone: true }),
     /** Filled in once the request is recorded on NEAR. */
     txHash: text('tx_hash'),
+    /** The request's id in the NEAR contract, used for votes and receipts. */
+    chainId: integer('chain_id'),
   },
   (t) => [check('amount_positive', sql`${t.amountCents} > 0`)],
 )
@@ -169,6 +173,40 @@ export const activity = pgTable(
     txHash: text('tx_hash'),
   },
   (t) => [index('activity_created_idx').on(t.createdAt)],
+)
+
+export const chainJobStatusEnum = pgEnum('chain_job_status', ['pending', 'done', 'failed'])
+
+/** What a chain job updates once its transaction lands on NEAR. */
+export type ChainTarget =
+  | { kind: 'pass'; memberId: string }
+  | { kind: 'request'; requestId: number }
+  | { kind: 'vote'; requestId: number; memberId: string }
+  | { kind: 'receipt'; requestId: number }
+  | { kind: 'none' }
+
+/**
+ * Outbox of contract calls. Each action writes its job in the same database
+ * transaction as the record, so nothing is lost if NEAR is slow or the
+ * server restarts. A single worker sends them in order.
+ */
+export const chainJobs = pgTable(
+  'chain_jobs',
+  {
+    id: serial('id').primaryKey(),
+    method: text('method').notNull(),
+    args: jsonb('args').$type<Record<string, unknown>>().notNull(),
+    target: jsonb('target').$type<ChainTarget>().notNull(),
+    /** Activity log entry to link to the transaction. */
+    activityId: integer('activity_id').references(() => activity.id),
+    status: chainJobStatusEnum('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    txHash: text('tx_hash'),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    doneAt: timestamp('done_at', { withTimezone: true }),
+  },
+  (t) => [index('chain_jobs_status_idx').on(t.status, t.id)],
 )
 
 export type MemberRow = typeof members.$inferSelect
