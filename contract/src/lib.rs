@@ -31,6 +31,7 @@ enum StorageKey {
     Passes,
     PassByOwner,
     Requests,
+    StudentVotes,
 }
 
 #[near(serializers = [json, borsh])]
@@ -171,6 +172,53 @@ pub struct Treasury {
     pass_by_owner: LookupMap<AccountId, u32>,
     requests: Vector<SpendRequest>,
     spent_cents: u64,
+    /// Student votes needed before the student majority counts as one committee vote.
+    student_quorum: u32,
+    /// Students' votes per request (request id -> votes).
+    student_votes: LookupMap<u32, Vec<Vote>>,
+}
+
+/// The contract's state before student votes existed, used by `migrate`.
+#[near(serializers = [borsh])]
+struct TreasuryV1 {
+    society: Society,
+    settings: Settings,
+    roles: IterableMap<AccountId, Role>,
+    passes: Vector<Pass>,
+    pass_by_owner: LookupMap<AccountId, u32>,
+    requests: Vector<SpendRequest>,
+    spent_cents: u64,
+}
+
+/// How students vote as a group: their majority counts once at least
+/// `quorum` students have voted. A tie (or too few votes) counts as nothing yet.
+pub fn student_bloc(yes: u32, no: u32, quorum: u32) -> Option<bool> {
+    if yes + no < quorum.max(1) {
+        None
+    } else if yes > no {
+        Some(true)
+    } else if no > yes {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// Decides a request from the committee's votes plus the students' one vote.
+/// `student_seat` is false when there are fewer students than the quorum, so
+/// requests never wait on a student vote that can't happen.
+pub fn outcome(committee_eligible: u32, committee_yes: u32, committee_no: u32, bloc: Option<bool>, student_seat: bool, percent: u8) -> RequestStatus {
+    let eligible = committee_eligible + u32::from(student_seat);
+    let need = required_yes(eligible, percent);
+    let yes = committee_yes + u32::from(student_seat && bloc == Some(true));
+    let no = committee_no + u32::from(student_seat && bloc == Some(false));
+    if yes >= need {
+        RequestStatus::Approved
+    } else if no > eligible.saturating_sub(need) {
+        RequestStatus::Rejected
+    } else {
+        RequestStatus::Voting
+    }
 }
 
 fn emit(event: &str, data: near_sdk::serde_json::Value) {
@@ -203,6 +251,8 @@ impl Treasury {
             pass_by_owner: LookupMap::new(StorageKey::PassByOwner),
             requests: Vector::new(StorageKey::Requests),
             spent_cents: 0,
+            student_quorum: 3,
+            student_votes: LookupMap::new(StorageKey::StudentVotes),
         };
         this.mint_pass(president.clone(), FeeMethod::Waived, 0, env::current_account_id());
         this.roles.insert(president.clone(), Role::President);
@@ -281,6 +331,34 @@ impl Treasury {
         emit("role_changed", json!({ "account_id": account_id, "role": Role::President, "by": env::current_account_id() }));
     }
 
+    /// One-off upgrade from the state before student votes. Run once, in the
+    /// same transaction as deploying this code.
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate() -> Self {
+        let old: TreasuryV1 = env::state_read().unwrap_or_else(|| env::panic_str("Nothing to migrate"));
+        Self {
+            society: old.society,
+            settings: old.settings,
+            roles: old.roles,
+            passes: old.passes,
+            pass_by_owner: old.pass_by_owner,
+            requests: old.requests,
+            spent_cents: old.spent_cents,
+            student_quorum: 3,
+            student_votes: LookupMap::new(StorageKey::StudentVotes),
+        }
+    }
+
+    /// President only: how many students must vote before their majority counts.
+    pub fn set_student_quorum(&mut self, quorum: u32, on_behalf_of: Option<AccountId>) {
+        let actor = self.actor(on_behalf_of);
+        self.require_role(&actor, &[Role::President]);
+        require!((1..=100).contains(&quorum), "Student quorum must be between 1 and 100");
+        self.student_quorum = quorum;
+        emit("student_quorum_updated", json!({ "quorum": quorum, "by": actor }));
+    }
+
     // ---------- Spending ----------
 
     /// Committee only: ask to spend money. Every request goes to a committee vote.
@@ -291,8 +369,8 @@ impl Treasury {
         require!(!title.trim().is_empty() && title.len() <= 200, "Title must be 1 to 200 characters");
         require!(app_ref.len() <= 40 && category.len() <= 40, "Reference and category must be 40 characters or fewer");
         // Nobody approves alone: a request needs at least 2 people who can vote on it.
-        let eligible = self.roles.keys().filter(|a| **a != actor).count();
-        require!(eligible >= 2, "You need at least 3 committee members before requests can be voted on");
+        let eligible = self.roles.keys().filter(|a| **a != actor).count() as u32 + u32::from(self.student_seat());
+        require!(eligible >= 2, "Not enough people can vote on this request yet: add committee members, or more students");
 
         let now = env::block_timestamp_ms();
         let id = self.requests.len() + 1;
@@ -321,6 +399,8 @@ impl Treasury {
         self.require_role(&actor, &[Role::President, Role::Treasurer, Role::Committee]);
         let approval_percent = self.settings.approval_percent;
         let committee: Vec<AccountId> = self.roles.keys().cloned().collect();
+        let student_seat = self.student_seat();
+        let bloc = self.bloc_for(request_id);
 
         let request = self.request_mut(request_id);
         require!(request.status == RequestStatus::Voting, "Voting on this request has closed");
@@ -331,19 +411,47 @@ impl Treasury {
         request.votes.push(Vote { voter: actor.clone(), approve, at_ms: now });
 
         let eligible = committee.iter().filter(|a| **a != request.requester).count() as u32;
-        let need = required_yes(eligible, approval_percent);
         let yes = request.votes.iter().filter(|v| v.approve).count() as u32;
         let no = request.votes.len() as u32 - yes;
-        if yes >= need {
-            request.status = RequestStatus::Approved;
-        } else if no > eligible.saturating_sub(need) {
-            request.status = RequestStatus::Rejected;
-        }
+        request.status = outcome(eligible, yes, no, bloc, student_seat, approval_percent);
         let status = request.status;
         if status != RequestStatus::Voting {
             request.decided_at_ms = Some(now);
         }
         emit("vote_cast", json!({ "request_id": request_id, "voter": actor, "approve": approve, "status": status }));
+        status
+    }
+
+    /// Members with a pass who aren't on the committee: vote on a request. The
+    /// students' majority counts as one committee vote once enough have voted.
+    /// Once each, and votes can't be changed.
+    pub fn student_vote(&mut self, request_id: u32, approve: bool, on_behalf_of: Option<AccountId>) -> RequestStatus {
+        let actor = self.actor(on_behalf_of);
+        require!(self.pass_by_owner.get(&actor).is_some(), "Only members with a pass can vote");
+        require!(self.roles.get(&actor).is_none(), "Committee members vote in the committee vote");
+
+        let mut all = self.student_votes.get(&request_id).cloned().unwrap_or_default();
+        require!(all.iter().all(|v| v.voter != actor), "You've already voted, and votes can't be changed");
+        let now = env::block_timestamp_ms();
+        all.push(Vote { voter: actor.clone(), approve, at_ms: now });
+        let yes = all.iter().filter(|v| v.approve).count() as u32;
+        let bloc = student_bloc(yes, all.len() as u32 - yes, self.student_quorum);
+
+        let approval_percent = self.settings.approval_percent;
+        let committee: Vec<AccountId> = self.roles.keys().cloned().collect();
+        let student_seat = self.student_seat();
+        let request = self.request_mut(request_id);
+        require!(request.status == RequestStatus::Voting, "Voting on this request has closed");
+        let eligible = committee.iter().filter(|a| **a != request.requester).count() as u32;
+        let committee_yes = request.votes.iter().filter(|v| v.approve).count() as u32;
+        let committee_no = request.votes.len() as u32 - committee_yes;
+        request.status = outcome(eligible, committee_yes, committee_no, bloc, student_seat, approval_percent);
+        let status = request.status;
+        if status != RequestStatus::Voting {
+            request.decided_at_ms = Some(now);
+        }
+        self.student_votes.insert(request_id, all);
+        emit("student_vote_cast", json!({ "request_id": request_id, "voter": actor, "approve": approve, "status": status }));
         status
     }
 
@@ -389,6 +497,14 @@ impl Treasury {
 
     pub fn get_requests(&self, from_index: Option<u32>, limit: Option<u32>) -> Vec<SpendRequest> {
         page(&self.requests, from_index, limit)
+    }
+
+    pub fn get_student_votes(&self, request_id: u32) -> Vec<Vote> {
+        self.student_votes.get(&request_id).cloned().unwrap_or_default()
+    }
+
+    pub fn get_student_quorum(&self) -> u32 {
+        self.student_quorum
     }
 
     pub fn get_stats(&self) -> Stats {
@@ -456,6 +572,23 @@ impl Treasury {
     fn require_role(&self, account: &AccountId, allowed: &[Role]) {
         let ok = self.roles.get(account).is_some_and(|r| allowed.contains(r));
         require!(ok, "You don't have the committee role needed for this");
+    }
+
+    /// Members with a pass and no committee role.
+    fn student_count(&self) -> u32 {
+        self.passes.len().saturating_sub(self.roles.len())
+    }
+
+    /// The students' combined vote only counts when there are enough students to reach the quorum.
+    fn student_seat(&self) -> bool {
+        self.student_count() >= self.student_quorum
+    }
+
+    fn bloc_for(&self, request_id: u32) -> Option<bool> {
+        let votes = self.student_votes.get(&request_id);
+        let yes = votes.map_or(0, |v| v.iter().filter(|x| x.approve).count() as u32);
+        let total = votes.map_or(0, |v| v.len() as u32);
+        student_bloc(yes, total - yes, self.student_quorum)
     }
 
     fn has_role(&self, role: Role) -> bool {
@@ -565,8 +698,107 @@ mod tests {
         t.issue_pass(acct("c1.testnet"), FeeMethod::Cash, 1500, None);
     }
 
+    /// Committee of president + treasurer only, plus three students.
+    fn small_committee_with_students() -> Treasury {
+        let mut t = setup();
+        as_caller("pres.testnet");
+        for m in ["treas.testnet", "s1.testnet", "s2.testnet", "s3.testnet"] {
+            t.issue_pass(acct(m), FeeMethod::Cash, 1500, None);
+        }
+        t.set_role(acct("treas.testnet"), Some(Role::Treasurer), None);
+        t
+    }
+
     #[test]
-    #[should_panic(expected = "at least 3 committee members")]
+    fn student_majority_counts_as_one_committee_vote() {
+        let mut t = small_committee_with_students();
+        as_caller("pres.testnet");
+        // Eligible: treasurer + the student seat = 2, so both must approve.
+        let id = t.create_request("REQ-0001".into(), "Pizza".into(), "Food".into(), 5000, None);
+        as_caller("treas.testnet");
+        assert_eq!(t.vote(id, true, None), RequestStatus::Voting);
+        as_caller("s1.testnet");
+        assert_eq!(t.student_vote(id, true, None), RequestStatus::Voting, "below the quorum of 3");
+        as_caller("s2.testnet");
+        assert_eq!(t.student_vote(id, false, None), RequestStatus::Voting);
+        as_caller("s3.testnet");
+        assert_eq!(t.student_vote(id, true, None), RequestStatus::Approved, "2 of 3 students said yes");
+        assert_eq!(t.get_student_votes(id).len(), 3);
+    }
+
+    #[test]
+    fn students_can_reject_together() {
+        let mut t = small_committee_with_students();
+        as_caller("pres.testnet");
+        let id = t.create_request("REQ-0001".into(), "Hoodies".into(), "Other".into(), 30000, None);
+        for s in ["s1.testnet", "s2.testnet", "s3.testnet"] {
+            as_caller(s);
+            t.student_vote(id, false, None);
+        }
+        assert_eq!(t.get_request(id).unwrap().status, RequestStatus::Rejected);
+    }
+
+    #[test]
+    #[should_panic(expected = "Committee members vote in the committee vote")]
+    fn committee_cannot_vote_as_students() {
+        let mut t = small_committee_with_students();
+        as_caller("pres.testnet");
+        let id = t.create_request("REQ-0001".into(), "Pizza".into(), "Food".into(), 5000, None);
+        as_caller("treas.testnet");
+        t.student_vote(id, true, None);
+    }
+
+    #[test]
+    #[should_panic(expected = "already voted")]
+    fn students_vote_once() {
+        let mut t = small_committee_with_students();
+        as_caller("pres.testnet");
+        let id = t.create_request("REQ-0001".into(), "Pizza".into(), "Food".into(), 5000, None);
+        as_caller("s1.testnet");
+        t.student_vote(id, true, None);
+        t.student_vote(id, false, None);
+    }
+
+    #[test]
+    fn migrate_keeps_existing_state() {
+        as_caller(CONTRACT);
+        // State as the previous contract version stored it.
+        let mut old = TreasuryV1 {
+            society: Society { name: "Computing Society".into(), short_name: "COMPSOC".into(), term: "2026/27".into() },
+            settings: Settings { approval_percent: 50, auto_approve_limit_cents: 0, membership_fee_cents: 1500 },
+            roles: IterableMap::new(StorageKey::Roles),
+            passes: Vector::new(StorageKey::Passes),
+            pass_by_owner: LookupMap::new(StorageKey::PassByOwner),
+            requests: Vector::new(StorageKey::Requests),
+            spent_cents: 4200,
+        };
+        old.roles.insert(acct("pres.testnet"), Role::President);
+        old.passes.push(Pass { number: 1, owner: acct("pres.testnet"), term: "2026/27".into(), issued_at_ms: 0, issued_by: acct(CONTRACT), fee_method: FeeMethod::Waived, fee_cents: 0 });
+        old.pass_by_owner.insert(acct("pres.testnet"), 1);
+        old.roles.flush();
+        old.passes.flush();
+        old.pass_by_owner.flush();
+        env::state_write(&old);
+
+        let t = Treasury::migrate();
+        assert_eq!(t.get_stats().spent_cents, 4200);
+        assert_eq!(t.get_stats().passes, 1);
+        assert_eq!(t.get_roles(), vec![(acct("pres.testnet"), Role::President)]);
+        assert_eq!(t.get_pass(acct("pres.testnet")).unwrap().number, 1);
+        assert_eq!(t.get_student_quorum(), 3);
+        assert!(t.get_student_votes(1).is_empty());
+    }
+
+    #[test]
+    fn bloc_rules() {
+        assert_eq!(student_bloc(1, 0, 3), None);
+        assert_eq!(student_bloc(2, 1, 3), Some(true));
+        assert_eq!(student_bloc(1, 2, 3), Some(false));
+        assert_eq!(student_bloc(2, 2, 3), None, "a tie counts as nothing");
+    }
+
+    #[test]
+    #[should_panic(expected = "Not enough people can vote")]
     fn needs_three_committee_members_to_request() {
         let mut t = setup();
         as_caller("pres.testnet");
