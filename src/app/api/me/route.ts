@@ -25,6 +25,23 @@ export const POST = route(async (req: Request) => {
   const profile = await getPrivyProfile(privyUserId);
 
   if (member) {
+    // The founder may have signed up before BOOTSTRAP_PRESIDENT_EMAIL was set.
+    if (member.status === "pending" && member.email === env.bootstrapPresidentEmail()) {
+      const promoted = await db().transaction(async (tx) => {
+        const society = await getSociety(tx);
+        await tx.select().from(societies).where(eq(societies.id, society.id)).for("update");
+        const hasPresident = await tx.query.members.findFirst({ where: and(eq(members.role, "president"), eq(members.status, "active")) });
+        if (hasPresident) return null;
+        const [row] = await tx
+          .update(members)
+          .set({ role: "president", status: "active", passNumber: await nextPassNumber(tx), feeMethod: "waived", feeConfirmedAt: new Date(), nearAccountId: profile.nearAccountId ?? member.nearAccountId })
+          .where(eq(members.id, member.id))
+          .returning();
+        await logActivity(tx, "pass", `Founding president joined with pass #${String(row.passNumber).padStart(4, "0")}`, row.id);
+        return row;
+      });
+      if (promoted) return ok({ me: await loadMe(promoted) });
+    }
     if (member.email === profile.email && member.nearAccountId === profile.nearAccountId) return ok({ me: await loadMe(member) });
     const [updated] = await db()
       .update(members)
