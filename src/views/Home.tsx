@@ -7,7 +7,7 @@ import { KIND_TAG } from '../components/AppShell'
 import { MembershipPass } from '../components/MembershipPass'
 import { CountUp, EASE, int, Reveal, Stagger, StaggerItem } from '../components/motion'
 import { LedgerHead, RequestRow } from '../components/RequestRow'
-import { Figure, PageHeader, Section, SpecList, TxChip } from '../components/ui'
+import { Empty, Figure, PageHeader, Section, SpecList, TxChip } from '../components/ui'
 import { eur, longDate, passNo, shortDate, timeAgo } from '../lib/format'
 import { isCommittee, voteBlock } from '../lib/rules'
 import { useMe, useTreasury } from '../state/store'
@@ -110,7 +110,8 @@ export default function Home() {
       <div className="mt-16 grid grid-cols-1 gap-12 lg:grid-cols-[1.5fr_1fr]">
         <Reveal>
           <Section title="Latest spending">
-            <LedgerHead compact />
+            {requests.length === 0 && <Empty title="No spending yet" sub="Requests from the committee will appear here, with their votes and receipts." />}
+            {requests.length > 0 && <LedgerHead compact />}
             <Stagger>
               {requests.slice(0, 5).map((r) => (
                 <StaggerItem key={r.id}>
@@ -123,6 +124,7 @@ export default function Home() {
 
         <Reveal delay={0.1}>
           <Section title="Events">
+            {events.length === 0 && <Empty title="No events yet" sub="The committee adds events from their dashboard." />}
             <Stagger>
               {events.map((e) => {
                 const done = checkedIn(e.id)
@@ -168,7 +170,8 @@ export default function Home() {
       </div>
 
       <Reveal className="mt-16">
-        <Section title="On-chain activity" right={<span className="font-mono text-[11px] text-ink-3">NEAR testnet</span>}>
+        <Section title="Activity" right={<span className="font-mono text-[11px] text-ink-3">Latest {Math.min(activity.length, 7)} of {activity.length}</span>}>
+          {activity.length === 0 && <Empty title="Nothing yet" sub="Votes, requests, passes and receipts are logged here." />}
           <ul>
             <AnimatePresence initial={false}>
               {activity.slice(0, 7).map((a) => (
@@ -193,7 +196,7 @@ export default function Home() {
 
       <Reveal className="mt-10">
         <p className="font-mono text-[11px] leading-relaxed text-ink-3">
-          Rules set by the contract: nobody votes on their own request · nobody approves spending alone · anything over {eur(settings.autoApproveLimit)} needs a committee vote · past records can’t be edited.
+          Rules the treasury enforces: nobody votes on their own request · nobody approves spending alone · anything over {eur(settings.autoApproveLimit)} needs a committee vote · past records can’t be edited.
         </p>
       </Reveal>
     </>

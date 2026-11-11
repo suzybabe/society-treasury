@@ -40,6 +40,7 @@ export default function Settings() {
   const [draft, setDraft] = useState<SettingsT>(settings)
   const [nextPres, setNextPres] = useState('')
   const [confirming, setConfirming] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   if (me.role !== 'president') {
     return (
@@ -99,6 +100,9 @@ export default function Settings() {
           </Field>
           <Field label="Current term" hint="Changes at handover.">
             <input className="input font-mono" value={draft.term} disabled />
+          </Field>
+          <Field label="Opening balance (€)" hint="Money carried over from the previous committee.">
+            <input className="input font-mono" type="number" min={0} step={0.01} value={draft.openingBalance} onChange={(e) => set('openingBalance', Math.max(0, Number(e.target.value)))} />
           </Field>
         </div>
       </Group>
@@ -191,8 +195,16 @@ export default function Settings() {
                 <button onClick={() => setDraft(settings)} className="btn btn-line btn-sm">
                   Discard
                 </button>
-                <button onClick={() => updateSettings(draft)} className="btn btn-ink btn-sm">
-                  Save to NEAR
+                <button
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true)
+                    await updateSettings(draft)
+                    setSaving(false)
+                  }}
+                  className="btn btn-ink btn-sm"
+                >
+                  {saving ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </div>
