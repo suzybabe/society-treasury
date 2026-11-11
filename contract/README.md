@@ -1,63 +1,65 @@
-# Basic Auction Contract 
+# Society Treasury contract
 
-This directory contains a Rust contract that is used as part of the [Basic Auction Tutorial](https://docs.near.org/tutorials/auction/basic-auction).
+The on-chain record for a student society: membership passes, committee roles, voting rules, and every spending request with its votes and receipt hash.
 
-The contract is a simple auction where you can place bids, view the highest bid, and claim the tokens at the end of the auction.
+**Deployed on testnet:** [`society-treasury.testnet`](https://testnet.nearblocks.io/address/society-treasury.testnet)
 
-This repo showcases the basic anatomy of a smart contract application on NEAR Protocol that showcases how to store data in a contract, how to update the state, and then how to read it.
-There are also unit tests, integration tests, and CI/CD pipelines preconfigured for your reference.
+## What it enforces
 
----
+- Only committee members (president, treasurer, committee) can create requests or vote.
+- Nobody votes on their own request, and each member votes once. Votes can't be changed.
+- A request passes with more than `approval_percent` of eligible votes, and never with fewer than 2 approvals.
+- Requests under `auto_approve_limit_cents` are approved immediately.
+- Only the treasurer marks a request Spent, only after it's approved, and only with a SHA-256 receipt hash.
+- Only the treasurer issues passes (or the president, while there's no treasurer). One pass per account.
+- Passes can't be transferred. Records can't be edited or deleted.
 
-## How to Build Locally?
+Members can call the contract with their own NEAR account. The contract account itself can also record an action **on behalf of** a member (`on_behalf_of`), so the app's backend can write records without students paying gas. The rules are checked against that member either way.
 
-Install [`cargo-near`](https://github.com/near/cargo-near) and run:
+## Methods
 
-```bash
-cargo near build
-```
+| Method | Who | What it does |
+|---|---|---|
+| `new(society, settings, president)` | contract account (once) | Sets up the society and issues pass #1 to the president |
+| `issue_pass(member, fee_method, fee_cents)` | treasurer | Mints a membership pass (NFT) |
+| `set_role(account_id, role)` | president | Gives or removes a committee role. One treasurer at a time |
+| `handover(new_president, new_term)` | president | Hands the presidency to the next committee |
+| `update_settings(settings)` | president | Changes the voting rules and fee |
+| `create_request(app_ref, title, category, amount_cents)` | committee | Asks to spend money |
+| `vote(request_id, approve)` | committee | Votes on a request |
+| `mark_spent(request_id, receipt_sha256)` | treasurer | Records the receipt hash and marks it Spent |
 
-## How to Test Locally?
+Every change method also takes an optional `on_behalf_of`.
 
-```bash
-cargo test
-```
+Views: `get_society`, `get_settings`, `get_roles`, `get_pass`, `get_passes`, `get_request`, `get_requests`, `get_stats`, plus the NEP-171 views `nft_metadata`, `nft_token`, `nft_tokens`, `nft_tokens_for_owner`, `nft_total_supply` and `nft_supply_for_owner`. Changes emit `EVENT_JSON` logs (`nep171` `nft_mint` for passes, `society_treasury` for everything else).
 
-## How to Deploy?
+## Build and test
 
-Deployment is automated with GitHub Actions CI/CD pipeline.
-To deploy manually, install [`cargo-near`](https://github.com/near/cargo-near) and run:
-
-If you deploy for debugging purposes:
-
-```bash
-cargo near deploy build-non-reproducible-wasm
-```
-
-If you deploy production ready smart contract:
-
-```bash
-cargo near deploy build-reproducible-wasm
-```
-
-## Initialize the contract
+Needs [Rust](https://rustup.rs) and [cargo-near](https://github.com/near/cargo-near).
 
 ```bash
-# on Linux / Windows WSL
-TWO_MINUTES_FROM_NOW=$(date -d '+2 minutes' +%s000000000)
-# on MacOS
-TWO_MINUTES_FROM_NOW=$(date -v+2M +%s000000000)
-
-near contract call-function as-transaction '<CONTRACT_ACCOUNT_ID>' init json-args '{"end_time": "'$TWO_MINUTES_FROM_NOW'", "auctioneer": "<AUCTIONEER_ACCOUNT_ID>"}' prepaid-gas '30.0 Tgas' attached-deposit '0 NEAR'
+cargo test                                      # unit tests
+cargo near build non-reproducible-wasm --no-abi # writes target/near/society_treasury.wasm
 ```
 
-## Useful Links
+On Windows, set `AWS_LC_SYS_PREBUILT_NASM=1` before `cargo test` (a test dependency otherwise needs the NASM assembler). `--no-abi` skips ABI generation, which fails to link on Windows. Neither affects the deployed contract.
 
-- [cargo-near](https://github.com/near/cargo-near) - NEAR smart contract development toolkit for Rust
-- [near CLI](https://near.cli.rs) - Interact with NEAR blockchain from command line
-- [NEAR Rust SDK Documentation](https://docs.near.org/sdk/rust/introduction)
-- [NEAR Documentation](https://docs.near.org)
-- [NEAR StackOverflow](https://stackoverflow.com/questions/tagged/nearprotocol)
-- [NEAR Discord](https://near.chat)
-- [NEAR Telegram Developers Community Group](https://t.me/neardev)
-- NEAR DevHub: [Telegram](https://t.me/neardevhub), [Twitter](https://twitter.com/neardevhub)
+For a reproducible build (same binary on any machine), use `cargo near build reproducible-wasm` with Docker.
+
+## Deploy
+
+With [near CLI](https://github.com/near/near-cli-rs):
+
+```bash
+near contract deploy society-treasury.testnet use-file target/near/society_treasury.wasm \
+  with-init-call new json-args '{"society":{"name":"Computing Society","short_name":"COMPSOC","term":"2026/27"},"settings":{"approval_percent":50,"auto_approve_limit_cents":2000,"membership_fee_cents":1500},"president":"<president NEAR account>"}' \
+  prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' network-config testnet sign-with-legacy-keychain send
+```
+
+To redeploy new code without resetting state, deploy with `without-init-call` instead.
+
+Read state:
+
+```bash
+near contract call-function as-read-only society-treasury.testnet get_roles json-args '{}' network-config testnet now
+```
