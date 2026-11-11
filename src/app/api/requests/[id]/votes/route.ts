@@ -2,11 +2,10 @@ import { eq } from "drizzle-orm";
 import { enqueueChain, syncChainSoon } from "@/server/chain";
 import { z } from "zod";
 import { COMMITTEE_ROLES, decide } from "@/lib/rules";
-import type { Member, Settings, SpendRequest } from "@/lib/types";
 import { requireMember } from "@/server/auth";
 import { db, schema } from "@/server/db";
 import { ApiError, body, ok, route } from "@/server/http";
-import { committeeMembers, getSociety, logActivity, parseRequestRef, requestRef } from "@/server/society";
+import { activeMembers, getSociety, logActivity, parseRequestRef, requestRef, studentPollCounts } from "@/server/society";
 
 const { spendRequests, votes } = schema;
 const voteSchema = z.object({ choice: z.enum(["yes", "no"]) });
@@ -32,12 +31,17 @@ export const POST = route(async (req: Request, ctx: RouteContext<"/api/requests/
     const inserted = await tx.insert(votes).values({ requestId, memberId: me.id, choice }).onConflictDoNothing().returning();
     if (inserted.length === 0) throw new ApiError(409, "You've already voted, and votes can't be changed.");
 
-    const [allVotes, committee, society] = await Promise.all([tx.query.votes.findMany({ where: eq(votes.requestId, requestId) }), committeeMembers(tx), getSociety(tx)]);
-    // Reuse the same rules the UI shows, so both always agree.
+    const [allVotes, members, society, studentPoll] = await Promise.all([
+      tx.query.votes.findMany({ where: eq(votes.requestId, requestId) }),
+      activeMembers(tx),
+      getSociety(tx),
+      studentPollCounts(tx, requestId),
+    ]);
+    // Same rules as the UI and the contract, so all three always agree.
     const outcome = decide(
-      { requesterId: request.requesterId, votes: allVotes.map((v) => ({ memberId: v.memberId, choice: v.choice, at: "" })) } as SpendRequest,
-      committee.map((m) => ({ id: m.id, role: m.role })) as Member[],
-      { approvalPercent: society.approvalPercent } as Settings,
+      { requesterId: request.requesterId, votes: allVotes.map((v) => ({ memberId: v.memberId, choice: v.choice, at: "" })), studentPoll },
+      members,
+      { approvalPercent: society.approvalPercent, studentQuorum: society.studentQuorum },
     );
 
     const ref = requestRef(requestId);

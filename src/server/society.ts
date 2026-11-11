@@ -8,7 +8,7 @@ import { db, schema, type Tx } from './db'
 import type { FeeProofRow, MemberRow, SocietyRow } from './db/schema'
 import { toEuros } from './http'
 
-const { societies, members, spendRequests, votes, receipts, events, checkins, activity, feeProofs, chainJobs } = schema
+const { societies, members, spendRequests, votes, receipts, events, checkins, activity, feeProofs, chainJobs, studentVotes } = schema
 
 const DEFAULT_SOCIETY = {
   name: process.env.SOCIETY_NAME || 'Computing Society',
@@ -29,6 +29,7 @@ export const toSettings = (s: SocietyRow): Settings => ({
   shortName: s.shortName,
   term: s.term,
   approvalPercent: s.approvalPercent,
+  studentQuorum: s.studentQuorum,
   membershipFee: toEuros(s.membershipFeeCents),
   openingBalance: toEuros(s.openingBalanceCents),
 })
@@ -96,6 +97,20 @@ export async function logActivity(tx: Tx, kind: (typeof activity.$inferInsert)['
   return row.id
 }
 
+/** Every active member (committee and students), with their role, for vote decisions. */
+export async function activeMembers(tx: Tx | ReturnType<typeof db> = db()) {
+  return tx.query.members.findMany({ where: eq(members.status, 'active'), columns: { id: true, role: true, name: true, email: true, nearAccountId: true } })
+}
+
+/** A request's student vote counts, for deciding it. */
+export async function studentPollCounts(tx: Tx | ReturnType<typeof db>, requestId: number) {
+  const [row] = await tx
+    .select({ yes: sql<number>`count(*) filter (where ${studentVotes.choice} = 'yes')::int`, no: sql<number>`count(*) filter (where ${studentVotes.choice} = 'no')::int` })
+    .from(studentVotes)
+    .where(eq(studentVotes.requestId, requestId))
+  return { yes: row?.yes ?? 0, no: row?.no ?? 0, mine: null }
+}
+
 /** Active committee members, used to work out who can vote. */
 export async function committeeMembers(tx: Tx | ReturnType<typeof db> = db()) {
   return tx.query.members.findMany({ where: and(eq(members.status, 'active'), inArray(members.role, COMMITTEE_ROLES)) })
@@ -136,6 +151,7 @@ export async function buildState(me: MemberRow): Promise<TreasuryState> {
     if (t.kind === 'pass') chainBy.set(`pass:${t.memberId}`, toStatus(j))
     if (t.kind === 'request') chainBy.set(`request:${t.requestId}`, toStatus(j))
     if (t.kind === 'vote') chainBy.set(`vote:${t.requestId}:${t.memberId}`, toStatus(j))
+    if (t.kind === 'student_vote') chainBy.set(`student_vote:${t.requestId}:${t.memberId}`, toStatus(j))
     if (t.kind === 'receipt') chainBy.set(`receipt:${t.requestId}`, toStatus(j))
     if (j.activityId) chainBy.set(`activity:${j.activityId}`, toStatus(j))
   }
@@ -152,6 +168,19 @@ export async function buildState(me: MemberRow): Promise<TreasuryState> {
       : []
   const proofByMember = new Map<string, FeeProofMeta>()
   for (const p of reviewing) if (!proofByMember.has(p.memberId)) proofByMember.set(p.memberId, p)
+
+  const studentRows = await d.query.studentVotes.findMany()
+  const polls = new Map<number, { yes: number; no: number; mine: 'yes' | 'no' | null; myChain?: ChainStatus }>()
+  for (const v of studentRows) {
+    const p = polls.get(v.requestId) ?? { yes: 0, no: 0, mine: null }
+    if (v.choice === 'yes') p.yes++
+    else p.no++
+    if (v.memberId === me.id) {
+      p.mine = v.choice
+      p.myChain = chainOf(`student_vote:${v.requestId}:${v.memberId}`, v.txHash)
+    }
+    polls.set(v.requestId, p)
+  }
 
   const votesByRequest = new Map<number, typeof voteRows>()
   for (const v of voteRows) votesByRequest.set(v.requestId, [...(votesByRequest.get(v.requestId) ?? []), v])
@@ -172,6 +201,7 @@ export async function buildState(me: MemberRow): Promise<TreasuryState> {
       status: r.status,
       tx: r.txHash ?? undefined,
       chain: chainOf(`request:${r.id}`, r.txHash),
+      studentPoll: polls.get(r.id) ?? { yes: 0, no: 0, mine: null },
       decidedAt: r.decidedAt?.toISOString(),
       votes: (votesByRequest.get(r.id) ?? []).map((v) => ({ memberId: v.memberId, choice: v.choice, at: v.createdAt.toISOString(), tx: v.txHash ?? undefined, chain: chainOf(`vote:${r.id}:${v.memberId}`, v.txHash) })),
       receipt: receipt && {

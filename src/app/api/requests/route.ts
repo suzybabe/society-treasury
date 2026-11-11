@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { enqueueChain, syncChainSoon } from "@/server/chain";
-import { COMMITTEE_ROLES, MIN_ELIGIBLE_VOTERS } from "@/lib/rules";
+import { COMMITTEE_ROLES, MIN_VOTING_SEATS, votingSeats } from "@/lib/rules";
 import { CATEGORIES } from "@/lib/types";
 import { requireMember } from "@/server/auth";
 import { db, schema } from "@/server/db";
 import { ApiError, body, ok, route, toCents } from "@/server/http";
-import { committeeMembers, logActivity, requestRef } from "@/server/society";
+import { activeMembers, getSociety, logActivity, requestRef } from "@/server/society";
 
 const requestSchema = z.object({
   title: z.string().trim().min(3, "Say what it's for").max(120),
@@ -23,10 +23,11 @@ export const POST = route(async (req: Request) => {
   const input = requestSchema.parse(await body(req));
   const amountCents = toCents(input.amount);
 
-  // Nobody approves alone: with fewer than 2 eligible voters a request could never pass.
-  const eligible = (await committeeMembers()).filter((m) => m.id !== me.id).length;
-  if (eligible < MIN_ELIGIBLE_VOTERS) {
-    throw new ApiError(409, "You need at least 3 committee members (president, treasurer and committee) before requests can be voted on. The president can add them in Settings.");
+  // Nobody approves alone: a request needs at least 2 seats that can vote on it
+  // (other committee members, plus the students' seat once there are enough students).
+  const [members, society] = await Promise.all([activeMembers(), getSociety()]);
+  if (votingSeats(me.id, members, { studentQuorum: society.studentQuorum }) < MIN_VOTING_SEATS) {
+    throw new ApiError(409, `Not enough people can vote on this yet. Add committee members in Settings, or approve at least ${society.studentQuorum} students so their vote counts.`);
   }
 
   const id = await db().transaction(async (tx) => {

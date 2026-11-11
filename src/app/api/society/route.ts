@@ -12,6 +12,7 @@ const settingsSchema = z.object({
   societyName: z.string().trim().min(2).max(80),
   shortName: z.string().trim().min(2).max(10).transform((s) => s.toUpperCase()),
   approvalPercent: z.number().int().min(50).max(90),
+  studentQuorum: z.number().int().min(1).max(100),
   membershipFee: euros(1000),
   openingBalance: euros(1_000_000),
 });
@@ -28,6 +29,7 @@ export const PATCH = route(async (req: Request) => {
         name: s.societyName,
         shortName: s.shortName,
         approvalPercent: s.approvalPercent,
+        studentQuorum: s.studentQuorum,
         membershipFeeCents: toCents(s.membershipFee),
         openingBalanceCents: toCents(s.openingBalance),
       })
@@ -40,6 +42,9 @@ export const PATCH = route(async (req: Request) => {
       onBehalfOf: me.nearAccountId,
       activityId,
     });
+    if (s.studentQuorum !== society.studentQuorum) {
+      await enqueueChain(tx, { method: "set_student_quorum", args: { quorum: s.studentQuorum }, onBehalfOf: me.nearAccountId });
+    }
     return row;
   });
   syncChainSoon();

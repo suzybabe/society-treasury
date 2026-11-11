@@ -5,7 +5,7 @@ import { db, schema, type Tx } from './db'
 import type { ChainTarget } from './db/schema'
 import { callContract, nearConfigured } from './near'
 
-const { chainJobs, members, spendRequests, votes, receipts, activity } = schema
+const { chainJobs, members, spendRequests, votes, studentVotes, receipts, activity } = schema
 
 /** Give up on a job after this many network failures (contract rejections fail at once). */
 const MAX_ATTEMPTS = 8
@@ -59,7 +59,7 @@ export async function processChainJobs(): Promise<void> {
 
       // Votes and receipts need the request's id in the contract.
       const args = { ...job.args }
-      if (job.target.kind === 'vote' || job.target.kind === 'receipt') {
+      if (job.target.kind === 'vote' || job.target.kind === 'student_vote' || job.target.kind === 'receipt') {
         const request = await db().query.spendRequests.findFirst({ where: eq(spendRequests.id, job.target.requestId), columns: { chainId: true } })
         if (request?.chainId == null) {
           await markFailed(job.id, null, 'The request was never recorded on NEAR')
@@ -106,6 +106,9 @@ async function applyTarget(tx: Tx, target: ChainTarget, txHash: string, value: u
       break
     case 'vote':
       await tx.update(votes).set({ txHash }).where(and(eq(votes.requestId, target.requestId), eq(votes.memberId, target.memberId)))
+      break
+    case 'student_vote':
+      await tx.update(studentVotes).set({ txHash }).where(and(eq(studentVotes.requestId, target.requestId), eq(studentVotes.memberId, target.memberId)))
       break
     case 'receipt':
       await tx.update(receipts).set({ txHash }).where(eq(receipts.requestId, target.requestId))
