@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import useSWR from 'swr'
+import { RETURN_KEY } from '../components/AppShell'
 import { MembershipPass } from '../components/MembershipPass'
 import { PendingMembership } from '../components/PendingMembership'
 import { CountUp, EASE, int, Reveal, WordsUp } from '../components/motion'
@@ -33,7 +34,7 @@ const STEPS: { title: string; text: string; icon: StepIconKind }[] = [
   { title: 'Pay the fee', text: 'Cash, card or bank transfer, like you do now. Then send your proof.', icon: 'pay' },
   { title: 'Get your pass', text: 'The treasurer confirms it and your membership pass is minted on NEAR.', icon: 'pass' },
   { title: 'Request', text: 'A committee member asks to spend money, with the amount and the reason.', icon: 'request' },
-  { title: 'Vote', text: 'The committee votes. Small amounts are approved automatically.', icon: 'vote' },
+  { title: 'Vote', text: 'The committee votes on every request. It needs a majority and at least two approvals.', icon: 'vote' },
   { title: 'Check', text: 'Every vote, payment and receipt is visible to all members, for good.', icon: 'check' },
 ]
 
@@ -63,7 +64,17 @@ function SignIn() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (session.status === 'active') router.replace('/home')
+    if (session.status !== 'active') return
+    // Back to the page they were on before signing in, if any.
+    let target = '/home'
+    try {
+      const saved = sessionStorage.getItem(RETURN_KEY)
+      sessionStorage.removeItem(RETURN_KEY)
+      if (saved && saved.startsWith('/') && !saved.startsWith('/login')) target = saved
+    } catch {
+      /* storage unavailable */
+    }
+    router.replace(target)
   }, [session.status, router])
 
   const run = async (fn: () => Promise<void>) => {

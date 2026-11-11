@@ -25,11 +25,14 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: '/home', label: 'Home', icon: House },
   { href: '/spending', label: 'Spending', icon: ScrollText },
-  { href: '/chain', label: 'On NEAR', icon: Blocks },
   { href: '/members', label: 'Members', icon: Users },
   { href: '/committee', label: 'Committee', icon: Vote, roles: ['president', 'treasurer', 'committee'] },
   { href: '/settings', label: 'Settings', icon: SlidersHorizontal, roles: ['president'] },
+  { href: '/chain', label: 'On NEAR', icon: Blocks },
 ]
+
+/** Where to send someone back to after they sign in. */
+export const RETURN_KEY = 'treasury.returnTo'
 
 export const KIND_TAG: Record<ActivityKind, string> = {
   vote: 'Vote',
@@ -147,10 +150,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   const store = useTreasuryOptional()
   const router = useRouter()
   const status = session?.status
-  const mustLeave = !!status && status !== 'loading' && status !== 'active'
+  // Only leave when they're really signed out or still finishing sign-up.
+  // 'loading' and 'setting-up' happen on every refresh while the session is
+  // restored, and must not bounce them to /login (and from there to Home).
+  const mustLeave = status === 'signed-out' || status === 'needs-name' || status === 'pending' || status === 'error'
 
   useEffect(() => {
-    if (mustLeave) router.replace('/login')
+    if (!mustLeave) return
+    // Come back to this page after signing in.
+    try {
+      sessionStorage.setItem(RETURN_KEY, window.location.pathname + window.location.search)
+    } catch {
+      /* storage unavailable: they land on Home instead */
+    }
+    router.replace('/login')
   }, [mustLeave, router])
 
   // Before mount there's no session yet. Still render the page segment (its
