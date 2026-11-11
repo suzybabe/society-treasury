@@ -8,6 +8,9 @@ import useSWR from 'swr'
 import { MembershipPass } from '../components/MembershipPass'
 import { PendingMembership } from '../components/PendingMembership'
 import { CountUp, EASE, int, Reveal, WordsUp } from '../components/motion'
+import { HeroArt } from '../components/HeroArt'
+import { SiteFooter } from '../components/SiteFooter'
+import { StepIcon, type StepIconKind } from '../components/StepIcons'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { Logo } from '../components/ui'
 import { apiJson, errorMessage } from '../lib/api'
@@ -25,13 +28,13 @@ interface PublicSummary {
   balance: number
 }
 
-const STEPS = [
-  ['Sign up', 'Use your university email. A NEAR wallet is created for you.'],
-  ['Pay the fee', 'Cash, card or bank transfer, like you do now.'],
-  ['Get your pass', 'The treasurer confirms it and issues your membership pass.'],
-  ['Request', 'A committee member asks to spend money.'],
-  ['Vote', 'The committee votes. Small amounts are approved automatically.'],
-  ['Check', 'Every vote, payment and receipt is visible to all members.'],
+const STEPS: { title: string; text: string; icon: StepIconKind }[] = [
+  { title: 'Sign up', text: 'Use your university email. A NEAR wallet is created for you automatically.', icon: 'signup' },
+  { title: 'Pay the fee', text: 'Cash, card or bank transfer, like you do now. Then send your proof.', icon: 'pay' },
+  { title: 'Get your pass', text: 'The treasurer confirms it and your membership pass is minted on NEAR.', icon: 'pass' },
+  { title: 'Request', text: 'A committee member asks to spend money, with the amount and the reason.', icon: 'request' },
+  { title: 'Vote', text: 'The committee votes. Small amounts are approved automatically.', icon: 'vote' },
+  { title: 'Check', text: 'Every vote, payment and receipt is visible to all members, for good.', icon: 'check' },
 ]
 
 const SAMPLE_PASS: Member = { id: 'sample', name: 'Your name', email: '', role: 'student', near: 'your-account.near', passId: 0, joinedAt: '' }
@@ -202,95 +205,114 @@ export default function Login() {
   const shortName = data?.shortName ?? 'Society'
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col overflow-x-hidden">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-5">
         <Logo short={shortName} />
         <ThemeToggle />
       </div>
 
-      <main className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-12 px-5 pb-16 pt-1 sm:pt-4 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
-        {/* Product shot (below the sign-in form on mobile) */}
-        <div className="order-2 lg:order-1">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.9, ease: EASE }}
-            className="relative grid aspect-[4/3.3] place-items-center overflow-hidden rounded-md bg-stage"
-          >
+      <main className="flex-1">
+        {/* Hero: headline and sign-in, with the animated pass */}
+        <section className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-10 px-5 pb-14 pt-4 lg:grid-cols-[1.05fr_1fr] lg:gap-6 lg:pb-20 lg:pt-10">
+          <div>
             <motion.div
-              className="w-[74%]"
-              initial={{ y: -60, rotate: -14, opacity: 0 }}
-              animate={{ y: 0, rotate: -5, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 70, damping: 13, delay: 0.25 }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: EASE }}
+              className="inline-flex min-h-7 items-center gap-2 rounded-full border border-ink/15 px-3 py-1 font-mono text-[11px] uppercase tracking-wide text-ink-2"
             >
-              <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1.6 }}>
-                <MembershipPass member={SAMPLE_PASS} term={data?.term ?? ''} shortName={shortName} />
-              </motion.div>
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inset-0 animate-ping rounded-full bg-accent/60" />
+                <span className="relative h-2 w-2 rounded-full bg-accent" />
+              </span>
+              {data ? `${data.societyName} · ${data.term}` : 'Society treasury'}
             </motion.div>
-            <div className="absolute bottom-4 left-4 font-mono text-[11px] text-ink-3">Fig. 1 · Membership pass with a NEAR wallet</div>
-            {data && <div className="absolute right-4 top-4 rounded-full bg-paper px-3 py-1 font-mono text-[11px]">{eur(data.membershipFee)} / term</div>}
-          </motion.div>
+            <h1 className="wide mt-5 text-[3rem] font-black leading-[0.9] tracking-tight sm:text-7xl lg:text-[5.4rem]">
+              <WordsUp text="Society money," />
+              <br />
+              <WordsUp text="in the" delay={0.2} />
+              <span className="relative inline-block">
+                <WordsUp text="open." className="text-accent" delay={0.32} />
+                <svg viewBox="0 0 200 20" preserveAspectRatio="none" className="absolute -bottom-1 left-0 h-3 w-full text-accent" aria-hidden="true">
+                  <motion.path d="M3 14 C 60 4, 140 4, 197 12" fill="none" stroke="currentColor" strokeWidth={5} strokeLinecap="round" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: 0.9, duration: 0.8, ease: EASE }} />
+                </svg>
+              </span>
+            </h1>
+            <Reveal onLoad delay={0.45}>
+              <p className="mt-6 max-w-md text-lg text-ink-2">
+                Membership passes, committee votes and every euro spent, visible to every member and impossible to quietly change.
+              </p>
+            </Reveal>
+            <Reveal onLoad delay={0.55} className="mt-8 max-w-lg">
+              <div className="rounded-xl border-2 border-ink bg-card p-5 shadow-[6px_6px_0_0_var(--color-accent)] sm:p-6">
+                <SignIn />
+              </div>
+            </Reveal>
+          </div>
 
-          {data && (
-            <div className="mt-6 grid grid-cols-3 border-y border-ink/12">
+          <motion.div initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.9, ease: EASE, delay: 0.15 }}>
+            <HeroArt>
+              <motion.div initial={{ y: -40, rotate: -16, opacity: 0 }} animate={{ y: 0, rotate: -6, opacity: 1 }} transition={{ type: 'spring', stiffness: 70, damping: 13, delay: 0.35 }}>
+                <motion.div animate={{ y: [0, -10, 0] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1.6 }}>
+                  <MembershipPass member={SAMPLE_PASS} term={data?.term ?? ''} shortName={shortName} />
+                </motion.div>
+              </motion.div>
+            </HeroArt>
+          </motion.div>
+        </section>
+
+        {/* How it works, straight after the hero */}
+        <section className="border-y-2 border-ink bg-stage/60">
+          <div className="mx-auto w-full max-w-6xl px-5 py-14 lg:py-20">
+            <Reveal className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <h2 className="wide text-4xl font-black tracking-tight sm:text-5xl">How it works</h2>
+              <p className="max-w-sm text-ink-2">From paying your fee to seeing every receipt, in six steps. No crypto knowledge needed.</p>
+            </Reveal>
+            <ol className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {STEPS.map((s, i) => (
+                <motion.li
+                  key={s.title}
+                  initial={{ opacity: 0, y: 24 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-40px' }}
+                  transition={{ duration: 0.55, ease: EASE, delay: (i % 3) * 0.08 }}
+                  whileHover={{ y: -4 }}
+                  className="group relative overflow-hidden rounded-xl border-2 border-ink bg-card p-6 transition-shadow hover:shadow-[6px_6px_0_0_var(--color-accent)]"
+                >
+                  <div className="flex items-start justify-between">
+                    <span className="text-ink">
+                      <StepIcon kind={s.icon} />
+                    </span>
+                    <span className="num font-dot text-5xl font-black leading-none text-accent/80">{String(i + 1).padStart(2, '0')}</span>
+                  </div>
+                  <div className="wide mt-6 text-xl font-bold">{s.title}</div>
+                  <p className="mt-1.5 text-sm text-ink-2">{s.text}</p>
+                </motion.li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        {/* Live numbers */}
+        {data && (
+          <section className="bg-ink text-paper">
+            <div className="mx-auto grid w-full max-w-6xl grid-cols-1 divide-y divide-paper/15 px-5 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               {[
                 ['In the treasury', <CountUp key="b" value={data.balance} format={eur} />],
                 ['Passes issued', <CountUp key="p" value={data.passes} format={int} />],
                 ['Receipts on file', <CountUp key="r" value={data.receipts} format={int} />],
               ].map(([k, v], i) => (
-                <div key={i} className={`py-4 ${i ? 'border-l border-ink/12 pl-4' : ''}`}>
-                  <div className="label">{k}</div>
-                  <div className="num mt-1.5 font-dot text-2xl font-extrabold sm:text-3xl">{v}</div>
+                <div key={i} className="py-8 sm:px-8 sm:first:pl-0">
+                  <div className="font-mono text-[11px] uppercase tracking-wide text-paper/60">{k}</div>
+                  <div className="num mt-2 font-dot text-5xl font-black">{v}</div>
                 </div>
               ))}
             </div>
-          )}
-        </div>
-
-        {/* Sign in */}
-        <div className="order-1 lg:order-2 lg:pt-2">
-          <div className="label min-h-4">{data && `${data.societyName} · ${data.term}`}</div>
-          <h1 className="wide mt-3 text-[2.5rem] font-extrabold leading-[0.95] tracking-tight sm:text-6xl">
-            <WordsUp text="The society treasury," />
-            <br />
-            <WordsUp text="in the open." className="text-ink-3" delay={0.25} />
-          </h1>
-          <Reveal onLoad delay={0.4}>
-            <p className="mt-4 max-w-md text-ink-2 sm:mt-5 sm:text-lg">
-              Membership passes, committee votes and spending records, visible to every member and impossible to quietly change.
-            </p>
-          </Reveal>
-          <Reveal onLoad delay={0.5} className="mt-6 min-h-40 sm:mt-8">
-            <SignIn />
-          </Reveal>
-        </div>
-
-        {/* How it works */}
-        <Reveal className="order-3 lg:col-span-2">
-          <div className="border-b border-ink pb-2">
-            <h2 className="semi-wide text-[17px] font-semibold">How it works</h2>
-          </div>
-          <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {STEPS.map(([k, d], i) => (
-              <motion.li
-                key={k}
-                initial={{ opacity: 0, y: 12 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, ease: EASE, delay: i * 0.06 }}
-                className="flex gap-4 border-b border-ink/12 py-5 pr-6"
-              >
-                <span className="font-dot text-3xl font-black leading-none text-accent">{i + 1}</span>
-                <div>
-                  <div className="font-semibold">{k}</div>
-                  <div className="mt-0.5 text-sm text-ink-3">{d}</div>
-                </div>
-              </motion.li>
-            ))}
-          </ol>
-        </Reveal>
+          </section>
+        )}
       </main>
+
+      <SiteFooter societyName={data?.societyName} />
     </div>
   )
 }
-
