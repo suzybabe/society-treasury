@@ -1,6 +1,6 @@
 'use client'
 
-import { House, LogOut, ScrollText, SlidersHorizontal, Users, Vote, X, type LucideIcon } from 'lucide-react'
+import { Blocks, House, LogOut, ScrollText, SlidersHorizontal, Users, Vote, X, type LucideIcon } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -25,6 +25,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: '/home', label: 'Home', icon: House },
   { href: '/spending', label: 'Spending', icon: ScrollText },
+  { href: '/chain', label: 'On NEAR', icon: Blocks },
   { href: '/members', label: 'Members', icon: Users },
   { href: '/committee', label: 'Committee', icon: Vote, roles: ['president', 'treasurer', 'committee'] },
   { href: '/settings', label: 'Settings', icon: SlidersHorizontal, roles: ['president'] },
