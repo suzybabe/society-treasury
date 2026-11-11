@@ -15,8 +15,10 @@ function privy(): PrivyClient {
 export async function verifyRequest(req: Request): Promise<string> {
   const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
   if (!token) throw new ApiError(401, 'Please sign in.')
+  // Created outside the try, so missing keys surface as a server error, not "session expired".
+  const auth = privy().utils().auth()
   try {
-    const { user_id } = await privy().utils().auth().verifyAccessToken(token)
+    const { user_id } = await auth.verifyAccessToken(token)
     return user_id
   } catch (err) {
     unstable_rethrow(err)
