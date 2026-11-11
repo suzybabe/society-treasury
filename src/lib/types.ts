@@ -89,6 +89,15 @@ export interface Receipt {
   chain?: ChainStatus
 }
 
+/** How students have voted on a request. Their majority counts as one committee vote. */
+export interface StudentPoll {
+  yes: number
+  no: number
+  /** The signed-in member's own student vote, if any. */
+  mine: 'yes' | 'no' | null
+  myChain?: ChainStatus
+}
+
 export interface SpendRequest {
   id: string
   title: string
@@ -99,6 +108,7 @@ export interface SpendRequest {
   createdAt: string
   status: Status
   votes: Vote[]
+  studentPoll: StudentPoll
   tx?: string
   chain?: ChainStatus
   decidedAt?: string
@@ -140,6 +150,8 @@ export interface Settings {
   shortName: string
   term: string
   approvalPercent: number
+  /** Student votes needed before the student majority counts as one committee vote. */
+  studentQuorum: number
   membershipFee: number
   openingBalance: number
 }

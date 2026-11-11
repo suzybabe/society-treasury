@@ -13,6 +13,8 @@ export const CHAIN_METHOD_LABEL: Record<string, string> = {
   handover: 'Presidency handed over',
   update_settings: 'Voting rules updated',
   create_request: 'Spending request created',
-  vote: 'Vote cast',
+  vote: 'Committee vote cast',
+  student_vote: 'Student vote cast',
+  set_student_quorum: 'Student quorum updated',
   mark_spent: 'Receipt recorded, marked Spent',
 }
