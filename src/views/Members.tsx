@@ -2,6 +2,7 @@
 
 import { Check, FileText, Loader2, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
+import Link from 'next/link'
 import { useState } from 'react'
 import { EASE, Reveal } from '../components/motion'
 import { Avatar, Empty, PageHeader, RoleBadge, Section } from '../components/ui'
@@ -154,6 +155,9 @@ export default function Members() {
   const me = useMe()
   const { members, payments } = useTreasury()
   const seesApprovals = me.role === 'treasurer' || me.role === 'president'
+  // The president approves members until a treasurer is assigned.
+  const hasTreasurer = members.some((m) => m.role === 'treasurer')
+  const canApprove = me.role === 'treasurer' || (me.role === 'president' && !hasTreasurer)
   const withProof = payments.filter((p) => p.submission).length
 
   return (
@@ -173,10 +177,19 @@ export default function Members() {
       {seesApprovals && (
         <Reveal>
           <Section title="Waiting for approval" right={<span className="font-mono text-xs text-ink-3">{payments.length} pending</span>}>
+            {me.role === 'president' && !hasTreasurer && (
+              <p className="mt-3 rounded-md bg-sun/25 px-3 py-2 text-sm">
+                There’s no treasurer yet, so you approve new members for now. Approve your treasurer first, then make them treasurer in{' '}
+                <Link href="/settings" className="font-medium underline underline-offset-4">
+                  Settings
+                </Link>
+                .
+              </p>
+            )}
             {payments.length === 0 && <Empty title="All caught up" sub="New sign-ups appear here. Students send proof of payment from their sign-in page." />}
             <AnimatePresence initial={false}>
               {payments.map((p) => (
-                <ApprovalRow key={p.id} p={p} canApprove={me.role === 'treasurer'} />
+                <ApprovalRow key={p.id} p={p} canApprove={canApprove} />
               ))}
             </AnimatePresence>
           </Section>
