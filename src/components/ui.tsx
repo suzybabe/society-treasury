@@ -64,7 +64,7 @@ export function ChainChip({ chain, tx, className = '' }: { chain?: ChainStatus; 
         href={explorerTx(c.tx)}
         target="_blank"
         rel="noreferrer"
-        title={`View transaction ${c.tx} on NEAR Explorer`}
+        title={`View transaction ${c.tx} on NearBlocks`}
         className={`inline-flex items-center gap-1 whitespace-nowrap font-mono text-[11px] text-accent underline-offset-2 hover:underline ${className}`}
       >
         <Link2 size={11} /> {shortHash(c.tx)} ↗

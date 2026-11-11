@@ -10,7 +10,7 @@ import { useTreasury } from '../state/store'
 
 /**
  * Every contract transaction the app has made, newest first, each linking to
- * NEAR Explorer. Anyone with a pass can audit the whole on-chain record here.
+ * NearBlocks. Anyone with a pass can audit the whole on-chain record here.
  */
 export default function ChainLog() {
   const { chainLog, contractId } = useTreasury()
