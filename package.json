@@ -39,11 +39,9 @@
     "typescript": "^5"
   },
   "engines": {
-    "node": ">=22.18"
+    "node": "24.x"
   },
   "overrides": {
-    "@privy-io/react-auth": {
-      "@solana/kit": "^8.6.0"
-    }
+    "@solana/kit": "^8.6.0"
   }
 }
