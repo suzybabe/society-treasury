@@ -1,11 +1,11 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { requireMember } from "@/server/auth";
 import { db, schema } from "@/server/db";
 import { ApiError, body, ok, route } from "@/server/http";
 import { getSociety, logActivity, nextPassNumber } from "@/server/society";
 
-const { members, societies } = schema;
+const { members, societies, feeProofs } = schema;
 const confirmSchema = z.object({ method: z.enum(["cash", "card", "bank"]) });
 
 /**
@@ -31,6 +31,11 @@ export const POST = route(async (req: Request, ctx: RouteContext<"/api/members/[
       .update(members)
       .set({ status: "active", passNumber: pass, feeMethod: method, feeAmountCents: society.membershipFeeCents, feeConfirmedAt: new Date(), feeConfirmedBy: me.id })
       .where(eq(members.id, id));
+    // Mark their proof of payment (if they uploaded one) as accepted.
+    await tx
+      .update(feeProofs)
+      .set({ status: "accepted", reviewedBy: me.id, reviewedAt: new Date() })
+      .where(and(eq(feeProofs.memberId, id), eq(feeProofs.status, "reviewing")));
     await logActivity(tx, "pass", `Fee confirmed (${method}). Pass #${String(pass).padStart(4, "0")} issued to ${target.name ?? target.email}`, me.id);
     return pass;
   });
