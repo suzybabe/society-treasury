@@ -7,7 +7,7 @@ import { KIND_TAG } from '../components/AppShell'
 import { MembershipPass } from '../components/MembershipPass'
 import { CountUp, EASE, int, Reveal, Stagger, StaggerItem } from '../components/motion'
 import { LedgerHead, RequestRow } from '../components/RequestRow'
-import { Empty, Figure, PageHeader, Section, SpecList, TxChip } from '../components/ui'
+import { ChainChip, Empty, Figure, PageHeader, Section, SpecList } from '../components/ui'
 import { eur, longDate, passNo, shortDate, timeAgo } from '../lib/format'
 import { isCommittee, voteBlock } from '../lib/rules'
 import { useMe, useTreasury } from '../state/store'
@@ -67,7 +67,7 @@ export default function Home() {
                 ['NEAR account', <span key="near" className="font-mono text-xs">{me.near}</span>],
                 ['Term', settings.term],
                 ['Issued', shortDate(me.joinedAt)],
-                ['On NEAR', me.passTx ? <TxChip key="tx" tx={me.passTx} /> : <span key="tx" className="text-xs text-ink-3">{me.passId === 1 ? 'Minted when the contract was set up' : 'Recording…'}</span>],
+                ['On NEAR', me.passChain ? <ChainChip key="tx" chain={me.passChain} /> : <span key="tx" className="text-xs text-ink-3">{me.passId === 1 ? 'Minted when the contract was set up' : 'Not recorded on NEAR'}</span>],
                 [
                   'Status',
                   <span key="status" className="inline-flex items-center gap-2">
@@ -186,7 +186,7 @@ export default function Home() {
                 >
                   <span className="label col-span-2 sm:col-span-1 sm:self-center">{KIND_TAG[a.kind]}</span>
                   <span className="text-sm">{a.text}</span>
-                  <TxChip tx={a.tx} className="hidden self-center sm:inline" />
+                  <ChainChip chain={a.chain} tx={a.tx} className="self-center" />
                   <span className="self-center text-right font-mono text-[11px] text-ink-3">{timeAgo(a.at)}</span>
                 </motion.li>
               ))}

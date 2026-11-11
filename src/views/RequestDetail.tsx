@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { CountUp, EASE, Reveal } from '../components/motion'
-import { Avatar, Empty, RoleBadge, Section, SpecList, StatusBadge, TxChip, VoteMeter } from '../components/ui'
+import { Avatar, ChainChip, Empty, RoleBadge, Section, SpecList, StatusBadge, VoteMeter } from '../components/ui'
 import { dateTime, eur, timeAgo } from '../lib/format'
 import { tally, voteBlock, VOTE_BLOCK_TEXT } from '../lib/rules'
 import type { SpendRequest } from '../lib/types'
@@ -191,8 +191,13 @@ export default function RequestDetail() {
                               {m.name} {m.id === me.id && <span className="font-normal text-ink-3">(you)</span>}
                             </div>
                             <div className="text-xs text-ink-3">{vote ? dateTime(vote.at) : decided ? 'Didn’t vote' : 'Hasn’t voted yet'}</div>
+                            {vote && (
+                              <div className="sm:hidden">
+                                <ChainChip chain={vote.chain} tx={vote.tx} />
+                              </div>
+                            )}
                           </div>
-                          {vote ? <TxChip tx={vote.tx} className="hidden sm:inline" /> : <span className="hidden sm:inline" />}
+                          {vote ? <ChainChip chain={vote.chain} tx={vote.tx} className="hidden sm:inline-flex" /> : <span className="hidden sm:inline" />}
                           <AnimatePresence mode="wait">
                             {vote ? (
                               <motion.span
@@ -220,7 +225,7 @@ export default function RequestDetail() {
           </Reveal>
 
           <Reveal className="mt-14">
-            <Section title="Receipt" right={req.receipt && <TxChip tx={req.receipt.tx} />}>
+            <Section title="Receipt" right={req.receipt && <ChainChip chain={req.receipt.chain} tx={req.receipt.tx} />}>
               <div className="py-6">
                 {req.receipt ? (
                   <div className="flex flex-col items-start gap-6 sm:flex-row">
@@ -319,7 +324,7 @@ export default function RequestDetail() {
             <SpecList
               rows={[
                 ['Reference', <span key="ref" className="font-mono text-xs">{req.id}</span>],
-                ['NEAR transaction', req.tx ? <TxChip key="tx" tx={req.tx} /> : <span key="tx" className="text-xs text-ink-3">Not on NEAR yet</span>],
+                ['NEAR transaction', req.chain || req.tx ? <ChainChip key="tx" chain={req.chain} tx={req.tx} /> : <span key="tx" className="text-xs text-ink-3">Not recorded on NEAR</span>],
                 ['Votes recorded', <span key="votes" className="font-mono text-xs">{req.votes.length}</span>],
                 ...(req.receipt ? ([['Receipt SHA-256', <span key="sha" className="font-mono text-xs" title={req.receipt.sha256}>{req.receipt.sha256.slice(0, 12)}…</span>]] as [string, React.ReactNode][]) : []),
               ]}

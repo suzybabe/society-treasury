@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
 import { useState } from 'react'
 import { EASE, Reveal } from '../components/motion'
-import { Avatar, Empty, PageHeader, RoleBadge, Section } from '../components/ui'
+import { Avatar, ChainChip, Empty, PageHeader, RoleBadge, Section } from '../components/ui'
 import { errorMessage } from '../lib/api'
 import { eur, passNo, shortDate, timeAgo } from '../lib/format'
 import type { FeeMethod, FeePayment } from '../lib/types'
@@ -208,6 +208,11 @@ export default function Members() {
                     {m.name} {m.id === me.id && <span className="font-normal text-ink-3">(you)</span>}
                   </div>
                   <div className="truncate font-mono text-[11px] text-ink-3">{m.near ?? 'NEAR wallet pending'}</div>
+                  {m.passChain && (
+                    <div className="mt-0.5">
+                      <ChainChip chain={m.passChain} />
+                    </div>
+                  )}
                 </div>
                 <RoleBadge role={m.role} />
                 <span className="hidden text-xs text-ink-3 sm:block">since {shortDate(m.joinedAt)}</span>

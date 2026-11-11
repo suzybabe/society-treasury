@@ -6,7 +6,7 @@ import { eur, shortDate } from '../lib/format'
 import { tally } from '../lib/rules'
 import type { SpendRequest } from '../lib/types'
 import { memberById, useTreasury } from '../state/store'
-import { StatusBadge } from './ui'
+import { ChainDot, StatusBadge } from './ui'
 
 const FULL = 'sm:grid-cols-[64px_84px_minmax(0,1fr)_120px_110px]'
 const COMPACT = 'sm:grid-cols-[minmax(0,1fr)_120px_96px]'
@@ -46,6 +46,12 @@ export function RequestRow({ req, compact = false }: { req: SpendRequest; compac
           <span className={compact ? '' : 'sm:hidden'}>{req.id} · </span>
           {req.category} · {requester?.name ?? 'Unknown'}
           {req.status === 'voting' && ` · ${t.yes}/${t.need} votes`}
+          {req.chain && (
+            <>
+              {' · '}
+              <ChainDot chain={req.chain} />
+            </>
+          )}
         </div>
       </div>
 
