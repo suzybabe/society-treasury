@@ -1,6 +1,6 @@
 'use client'
 
-import { Banknote, Check, CreditCard, Landmark, X } from 'lucide-react'
+import { Check, Loader2, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -10,11 +10,79 @@ import { LedgerHead, RequestRow } from '../components/RequestRow'
 import { Empty, Figure, PageHeader, Section, VoteMeter } from '../components/ui'
 import { eur, timeAgo } from '../lib/format'
 import { isCommittee, requiredYes, tally, voteBlock } from '../lib/rules'
-import type { Category } from '../lib/types'
+import { CATEGORIES, type Category, type FeeMethod, type FeePayment } from '../lib/types'
 import { memberById, useMe, useTreasury } from '../state/store'
 
-const CATEGORIES: Category[] = ['Events', 'Equipment', 'Food', 'Travel', 'Software', 'Other']
-const METHOD_ICON = { cash: Banknote, card: CreditCard, bank: Landmark }
+/** One sign-up waiting for the treasurer: pick how they paid, then issue the pass. */
+function PaymentRow({ p }: { p: FeePayment }) {
+  const { settings, confirmFee } = useTreasury()
+  const [method, setMethod] = useState<FeeMethod>('cash')
+  const [busy, setBusy] = useState(false)
+  return (
+    <motion.div {...rowMotion} className="flex flex-col gap-3 border-b border-ink/12 py-3 sm:flex-row sm:items-center">
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{p.name}</div>
+        <div className="truncate text-xs text-ink-3">
+          {p.email} · signed up {timeAgo(p.submittedAt)} · fee {eur(settings.membershipFee)}
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <select className="input !h-[2.1rem] !w-32 !text-xs" value={method} onChange={(e) => setMethod(e.target.value as FeeMethod)} aria-label="How they paid">
+          <option value="cash">Cash</option>
+          <option value="card">Card</option>
+          <option value="bank">Bank transfer</option>
+        </select>
+        <motion.button
+          whileTap={{ scale: 0.94 }}
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true)
+            await confirmFee(p.id, method)
+            setBusy(false)
+          }}
+          className="btn btn-line btn-sm"
+        >
+          {busy ? <Loader2 size={14} className="animate-spin" /> : 'Confirm & issue pass'}
+        </motion.button>
+      </div>
+    </motion.div>
+  )
+}
+
+function NewEventForm() {
+  const { createEvent } = useTreasury()
+  const [name, setName] = useState('')
+  const [location, setLocation] = useState('')
+  const [when, setWhen] = useState('')
+  const [busy, setBusy] = useState(false)
+  const valid = name.trim().length > 1 && location.trim().length > 1 && !!when
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!valid) return
+    setBusy(true)
+    const ok = await createEvent({ name: name.trim(), location: location.trim(), startsAt: new Date(when).toISOString() })
+    setBusy(false)
+    if (ok) {
+      setName('')
+      setLocation('')
+      setWhen('')
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-3">
+      <input className="input" placeholder="Event name" value={name} onChange={(e) => setName(e.target.value)} />
+      <div className="grid grid-cols-2 gap-3">
+        <input className="input" placeholder="Location" value={location} onChange={(e) => setLocation(e.target.value)} />
+        <input className="input" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} aria-label="Date and time" />
+      </div>
+      <button disabled={!valid || busy} className="btn btn-line">
+        {busy ? <Loader2 size={16} className="animate-spin" /> : 'Add event'}
+      </button>
+    </form>
+  )
+}
 
 const rowMotion = {
   layout: true,
@@ -32,6 +100,7 @@ function NewRequestForm() {
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState<Category>('Events')
   const [description, setDescription] = useState('')
+  const [busy, setBusy] = useState(false)
 
   const n = Number(amount)
   const valid = title.trim().length > 2 && n > 0
@@ -39,10 +108,12 @@ function NewRequestForm() {
   const need = requiredYes(eligible, settings.approvalPercent)
   const auto = n > 0 && n < settings.autoApproveLimit
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!valid) return
-    const id = submitRequest({ title: title.trim(), description: description.trim(), category, amount: Math.round(n * 100) / 100 })
+    if (!valid || busy) return
+    setBusy(true)
+    const id = await submitRequest({ title: title.trim(), description: description.trim(), category, amount: Math.round(n * 100) / 100 })
+    setBusy(false)
     if (id) router.push(`/spending/${id}`)
   }
 
@@ -92,8 +163,8 @@ function NewRequestForm() {
         </motion.div>
       </AnimatePresence>
 
-      <button disabled={!valid} className="btn btn-ink">
-        Submit request
+      <button disabled={!valid || busy} className="btn btn-ink">
+        {busy ? <Loader2 size={16} className="animate-spin" /> : 'Submit request'}
       </button>
     </form>
   )
@@ -101,7 +172,7 @@ function NewRequestForm() {
 
 export default function Committee() {
   const me = useMe()
-  const { requests, members, settings, payments, castVote, confirmFee } = useTreasury()
+  const { requests, members, settings, payments, castVote } = useTreasury()
 
   useEffect(() => {
     if (window.location.hash === '#new') setTimeout(() => document.getElementById('new')?.scrollIntoView({ behavior: 'smooth' }), 400)
@@ -195,25 +266,11 @@ export default function Committee() {
           {isTreasurer && (
             <Reveal>
               <Section title="Fee payments to confirm" right={<span className="font-mono text-xs text-ink-3">{payments.length} pending</span>}>
-                {payments.length === 0 && <Empty title="No pending payments" sub="New sign-ups appear here after a student pays." />}
+                {payments.length === 0 && <Empty title="No one waiting" sub="New sign-ups appear here. Confirm once they’ve paid you." />}
                 <AnimatePresence initial={false}>
-                  {payments.map((p) => {
-                    const Icon = METHOD_ICON[p.method]
-                    return (
-                      <motion.div key={p.id} {...rowMotion} className="flex items-center gap-3 border-b border-ink/12 py-3">
-                        <Icon size={18} className="shrink-0 text-ink-3" />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium">{p.name}</div>
-                          <div className="text-xs text-ink-3">
-                            {p.method === 'bank' ? 'Bank transfer' : p.method === 'card' ? 'Card' : 'Cash'} · {eur(p.amount)} · {timeAgo(p.submittedAt)}
-                          </div>
-                        </div>
-                        <motion.button whileTap={{ scale: 0.94 }} onClick={() => confirmFee(p.id)} className="btn btn-line btn-sm">
-                          Confirm & mint pass
-                        </motion.button>
-                      </motion.div>
-                    )
-                  })}
+                  {payments.map((p) => (
+                    <PaymentRow key={p.id} p={p} />
+                  ))}
                 </AnimatePresence>
               </Section>
             </Reveal>
@@ -239,8 +296,16 @@ export default function Committee() {
           <Reveal delay={0.1}>
             <div className="box p-6">
               <h2 className="semi-wide text-[17px] font-semibold">New spending request</h2>
-              <p className="mb-5 mt-1 text-sm text-ink-3">Saved to NEAR as soon as you submit.</p>
+              <p className="mb-5 mt-1 text-sm text-ink-3">Every member can see it as soon as you submit. It can’t be edited afterwards.</p>
               <NewRequestForm />
+            </div>
+          </Reveal>
+
+          <Reveal>
+            <div className="box p-6">
+              <h2 className="semi-wide text-[17px] font-semibold">New event</h2>
+              <p className="mb-5 mt-1 text-sm text-ink-3">Members check in to it from their home page.</p>
+              <NewEventForm />
             </div>
           </Reveal>
 
