@@ -34,6 +34,7 @@
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
+    "railway": "^3.16.0",
     "tailwindcss": "4.3.3",
     "typescript": "^5"
   },
