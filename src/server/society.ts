@@ -1,12 +1,12 @@
 import 'server-only'
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { COMMITTEE_ROLES } from '@/lib/rules'
-import type { Me, Member, Settings, TreasuryState } from '@/lib/types'
+import type { FeeMethod, FeeSubmission, Me, Member, Settings, TreasuryState } from '@/lib/types'
 import { db, schema, type Tx } from './db'
-import type { MemberRow, SocietyRow } from './db/schema'
+import type { FeeProofRow, MemberRow, SocietyRow } from './db/schema'
 import { toEuros } from './http'
 
-const { societies, members, spendRequests, votes, receipts, events, checkins, activity } = schema
+const { societies, members, spendRequests, votes, receipts, events, checkins, activity, feeProofs } = schema
 
 const DEFAULT_SOCIETY = {
   name: process.env.SOCIETY_NAME || 'Computing Society',
@@ -32,7 +32,28 @@ export const toSettings = (s: SocietyRow): Settings => ({
   openingBalance: toEuros(s.openingBalanceCents),
 })
 
-export const toMe = (m: MemberRow): Me => ({
+type FeeProofMeta = Omit<FeeProofRow, 'data'>
+
+export const toFeeSubmission = (p: FeeProofMeta): FeeSubmission => ({
+  id: p.id,
+  status: p.status,
+  method: p.method as FeeMethod,
+  fileName: p.fileName,
+  mimeType: p.mimeType,
+  submittedAt: p.submittedAt.toISOString(),
+  note: p.reviewNote,
+})
+
+/** The member's most recent proof of payment, without the file itself. */
+export function latestFeeProof(memberId: string, tx: Tx | ReturnType<typeof db> = db()) {
+  return tx.query.feeProofs.findFirst({
+    where: eq(feeProofs.memberId, memberId),
+    orderBy: desc(feeProofs.submittedAt),
+    columns: { data: false },
+  })
+}
+
+export const toMe = (m: MemberRow, proof?: FeeProofMeta | null): Me => ({
   id: m.id,
   name: m.name,
   email: m.email,
@@ -41,7 +62,13 @@ export const toMe = (m: MemberRow): Me => ({
   near: m.nearAccountId,
   passId: m.passNumber,
   joinedAt: (m.feeConfirmedAt ?? m.createdAt).toISOString(),
+  feeSubmission: proof && m.status === 'pending' ? toFeeSubmission(proof) : null,
 })
+
+/** The signed-in person's profile, including their latest submission while pending. */
+export async function loadMe(m: MemberRow): Promise<Me> {
+  return toMe(m, m.status === 'pending' ? await latestFeeProof(m.id) : null)
+}
 
 export const toMember = (m: MemberRow): Member => ({
   id: m.id,
@@ -95,6 +122,18 @@ export async function buildState(me: MemberRow): Promise<TreasuryState> {
     me.role === 'treasurer' ? d.query.members.findMany({ where: eq(members.status, 'pending'), orderBy: asc(members.createdAt) }) : Promise.resolve([]),
   ])
 
+  // Submissions awaiting review, newest first, so the first one per member wins.
+  const reviewing =
+    pendingRows.length > 0
+      ? await d.query.feeProofs.findMany({
+          where: and(eq(feeProofs.status, 'reviewing'), inArray(feeProofs.memberId, pendingRows.map((m) => m.id))),
+          orderBy: desc(feeProofs.submittedAt),
+          columns: { data: false },
+        })
+      : []
+  const proofByMember = new Map<string, FeeProofMeta>()
+  for (const p of reviewing) if (!proofByMember.has(p.memberId)) proofByMember.set(p.memberId, p)
+
   const votesByRequest = new Map<number, typeof voteRows>()
   for (const v of voteRows) votesByRequest.set(v.requestId, [...(votesByRequest.get(v.requestId) ?? []), v])
   const receiptByRequest = new Map(receiptRows.map((r) => [r.requestId, r]))
@@ -145,7 +184,13 @@ export async function buildState(me: MemberRow): Promise<TreasuryState> {
     },
     members: memberRows.map(toMember),
     requests,
-    payments: pendingRows.map((m) => ({ id: m.id, name: m.name ?? m.email, email: m.email, submittedAt: m.createdAt.toISOString() })),
+    // Sign-ups with a submission to review come first.
+    payments: pendingRows
+      .map((m) => {
+        const proof = proofByMember.get(m.id)
+        return { id: m.id, name: m.name ?? m.email, email: m.email, submittedAt: (proof?.submittedAt ?? m.createdAt).toISOString(), submission: proof ? toFeeSubmission(proof) : null }
+      })
+      .sort((a, b) => Number(!!b.submission) - Number(!!a.submission)),
     events: eventRows.map((e) => ({ id: String(e.id), name: e.name, date: e.startsAt.toISOString(), location: e.location, attendees: attendance.get(e.id) ?? 0, checkedIn: mine.has(e.id) })),
     activity: activityRows.map((a) => ({ id: String(a.id), kind: a.kind, text: a.text, at: a.createdAt.toISOString(), tx: a.txHash ?? undefined })),
   }

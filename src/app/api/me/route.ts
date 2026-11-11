@@ -5,14 +5,14 @@ import { db, schema } from "@/server/db";
 import { env } from "@/server/env";
 import { ApiError, body, ok, route } from "@/server/http";
 import { getPrivyProfile } from "@/server/privy";
-import { getSociety, logActivity, nextPassNumber, toMe } from "@/server/society";
+import { getSociety, loadMe, logActivity, nextPassNumber, toMe } from "@/server/society";
 
 const { members, societies } = schema;
 
 /** The signed-in person's membership, or null if they haven't registered. */
 export const GET = route(async (req: Request) => {
   const { member } = await currentMember(req);
-  return ok({ me: member ? toMe(member) : null });
+  return ok({ me: member ? await loadMe(member) : null });
 });
 
 /**
@@ -25,13 +25,13 @@ export const POST = route(async (req: Request) => {
   const profile = await getPrivyProfile(privyUserId);
 
   if (member) {
-    if (member.email === profile.email && member.nearAccountId === profile.nearAccountId) return ok({ me: toMe(member) });
+    if (member.email === profile.email && member.nearAccountId === profile.nearAccountId) return ok({ me: await loadMe(member) });
     const [updated] = await db()
       .update(members)
       .set({ email: profile.email, nearAccountId: profile.nearAccountId ?? member.nearAccountId })
       .where(eq(members.id, member.id))
       .returning();
-    return ok({ me: toMe(updated) });
+    return ok({ me: await loadMe(updated) });
   }
 
   const created = await db().transaction(async (tx) => {
@@ -68,5 +68,5 @@ export const PATCH = route(async (req: Request) => {
   if (!member) throw new ApiError(403, "Finish signing up first.");
   const { name } = nameSchema.parse(await body(req));
   const [updated] = await db().update(members).set({ name }).where(eq(members.id, member.id)).returning();
-  return ok({ me: toMe(updated) });
+  return ok({ me: await loadMe(updated) });
 });

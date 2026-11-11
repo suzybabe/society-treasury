@@ -22,6 +22,18 @@ export interface Member {
   joinedAt: string
 }
 
+/** A student's latest proof-of-payment submission. */
+export interface FeeSubmission {
+  id: string
+  status: 'reviewing' | 'accepted' | 'rejected'
+  method: FeeMethod
+  fileName: string
+  mimeType: string
+  submittedAt: string
+  /** The treasurer's reason, when rejected. */
+  note: string | null
+}
+
 /** The signed-in person, who may still be waiting for their fee to be confirmed. */
 export interface Me {
   id: string
@@ -32,6 +44,8 @@ export interface Me {
   near: string | null
   passId: number | null
   joinedAt: string
+  /** Latest proof of payment, while their membership is pending. */
+  feeSubmission: FeeSubmission | null
 }
 
 export interface Vote {
@@ -72,6 +86,8 @@ export interface FeePayment {
   name: string
   email: string
   submittedAt: string
+  /** Their proof of payment, if they've uploaded one that's awaiting review. */
+  submission: FeeSubmission | null
 }
 
 export interface SocietyEvent {
