@@ -118,14 +118,14 @@ Society Treasury is a transparent record-keeping and voting app for student soci
 ## Features
 
 ### MVP (hackathon scope)
-- [ ] Email login with embedded wallet
-- [ ] Create a society and add committee members
+- [x] Email login with embedded wallet
+- [x] Create a society and add committee members
 - [ ] Treasurer confirms payment and issues membership NFT pass
-- [ ] Create spending requests
-- [ ] Committee voting (majority, no self-voting)
-- [ ] Auto-approve under a spending limit
-- [ ] Upload receipt and mark as Spent
-- [ ] Public spending log and totals
+- [x] Create spending requests
+- [x] Committee voting (majority, no self-voting)
+- [x] Auto-approve under a spending limit
+- [x] Upload receipt and mark as Spent
+- [x] Public spending log and totals
 
 ### Future ideas
 - [ ] Separate budgets per event
@@ -139,9 +139,11 @@ Society Treasury is a transparent record-keeping and voting app for student soci
 ## Getting started
 
 ### Prerequisites
-- Node.js (LTS)
+- Node.js 22.18 or newer
 - npm
 - Git
+- A [Privy](https://dashboard.privy.io) app with **email** login enabled
+- A Postgres database (we use Railway's)
 
 ### Run locally
 
@@ -149,18 +151,60 @@ Society Treasury is a transparent record-keeping and voting app for student soci
 git clone https://github.com/suzybabe/society-treasury.git
 cd society-treasury
 npm install
+cp .env.example .env.local   # then fill in the values (see below)
+npm run db:migrate           # creates the tables
 npm run dev
 ```
 
 Then open [http://localhost:3000](http://localhost:3000).
 
-### Trying the demo
+### Environment variables
 
-The frontend currently runs on mock data in the browser, so every flow can be tried before the NEAR contract is deployed. Transaction hashes are placeholders, and refreshing the page resets the data.
+| Variable | What it is |
+|---|---|
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Privy app ID (Privy dashboard → Settings → Basics) |
+| `NEXT_PUBLIC_PRIVY_CLIENT_ID` | Optional Privy app client ID |
+| `PRIVY_APP_SECRET` | Privy app secret. Server-side only, keep it secret |
+| `DATABASE_URL` | Postgres connection string |
+| `BOOTSTRAP_PRESIDENT_EMAIL` | The first person to sign up with this email becomes president |
 
-- Sign in with a demo account on the login page, or switch accounts with the "Demo · view as" control at the bottom left.
-- You can also open the app as a specific role: `/home?as=m1` (president), `?as=m2` (treasurer), `?as=m3` (committee) or `?as=m6` (student).
-- Use the sun/moon button in the header to switch between light and dark mode. It follows your system setting until you choose.
+`.env.local` is git-ignored. Never commit real keys.
+
+### How sign-in works
+
+1. A student enters their email and the 6-digit code Privy sends them. The same flow signs up new users.
+2. The app creates a **NEAR embedded wallet** for them through Privy (an implicit NEAR account), then registers them with the API.
+3. They enter their name, then wait for the treasurer to confirm they've paid. The page opens the treasury automatically once their pass is issued.
+4. The person whose email matches `BOOTSTRAP_PRESIDENT_EMAIL` skips the wait and becomes president. They then assign the treasurer and committee in Settings.
+
+### Database
+
+The schema lives in `src/server/db/schema.ts` (Drizzle ORM). After changing it:
+
+```bash
+npm run db:generate   # writes a new SQL migration to ./drizzle
+npm run db:migrate    # applies it
+```
+
+Records are append-only: there are no API routes to edit or delete requests, votes, receipts or the activity log.
+
+### Deploying to Railway
+
+Infrastructure is defined in `.railway/railway.ts`: a `web` service (this Next.js app) and a `Postgres` database. Variables are managed in Railway, not in that file.
+
+```bash
+railway link                     # pick the society-treasury project
+railway config plan              # preview changes
+railway config apply             # create/update services
+railway variables --service web --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' \
+  --set NEXT_PUBLIC_PRIVY_APP_ID=... --set PRIVY_APP_SECRET=... --set BOOTSTRAP_PRESIDENT_EMAIL=...
+railway up --service web         # deploy (or connect the GitHub repo in the dashboard)
+railway domain --service web     # get a public URL
+```
+
+Each deploy runs `npm run db:migrate` first and checks `/api/health`. Add the public URL to your Privy app's **allowed origins**.
+
+> On Windows with an npm-installed Railway CLI, `railway config plan/apply` may fail with "requires Railway CLI 5.42.1 or newer". Run it from PowerShell with `$env:_ = "C:\Program Files\nodejs\node_modules\@railway\cli\bin\railway.exe"` set first.
 
 ---
 
@@ -168,15 +212,20 @@ The frontend currently runs on mock data in the browser, so every flow can be tr
 
 ```
 society-treasury/
+├── .railway/            # Railway infrastructure (railway.ts)
+├── drizzle/             # SQL migrations
 ├── public/              # Static files (icons, images)
+├── scripts/migrate.mjs  # Applies migrations (run before each deploy)
 ├── src/
 │   ├── app/             # Next.js routes (App Router)
-│   │   ├── login/       # Email sign-in
+│   │   ├── api/         # Backend API: auth, members, requests, votes, receipts, events
+│   │   ├── login/       # Email sign-in and sign-up
 │   │   └── (app)/       # Signed-in pages: home, spending, spending/[id], committee, settings
+│   ├── server/          # Server-only code: database, Privy verification, permissions
 │   ├── views/           # Page content for each route
 │   ├── components/      # App shell, membership pass, theme toggle, shared UI
-│   ├── state/store.tsx  # Demo data store (to be replaced by NEAR contract calls)
-│   └── lib/             # Types, voting rules, formatting, mock data
+│   ├── state/           # Session (Privy + NEAR wallet) and data store (API)
+│   └── lib/             # Shared types, voting rules, formatting
 ├── package.json
 ├── tsconfig.json
 └── README.md
