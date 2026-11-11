@@ -88,8 +88,10 @@ export function parseRequestRef(ref: string): number | null {
   return Number.isInteger(n) && n > 0 ? n : null
 }
 
-export async function logActivity(tx: Tx, kind: (typeof activity.$inferInsert)['kind'], text: string, actorId: string | null) {
-  await tx.insert(activity).values({ kind, text, actorId })
+/** Adds an entry to the public activity log and returns its id. */
+export async function logActivity(tx: Tx, kind: (typeof activity.$inferInsert)['kind'], text: string, actorId: string | null): Promise<number> {
+  const [row] = await tx.insert(activity).values({ kind, text, actorId }).returning({ id: activity.id })
+  return row.id
 }
 
 /** Active committee members, used to work out who can vote. */
