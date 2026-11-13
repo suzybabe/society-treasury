@@ -1,262 +1,200 @@
 # Society Treasury
 
-**Transparent membership passes, committee voting and spending records for student societies, built on NEAR.**
+Society Treasury is a shared record book for student societies. Members sign in with an email address, get a membership pass, and see where every euro goes. Spending only happens after a vote, and students vote alongside the committee. Every pass, vote and receipt is written to a NEAR smart contract, so nobody can quietly change the books later.
 
-Built for the **NEAR HACKATHON 2026** · Track: **Social Money**
+**Live app:** [web-production-b3f76b45.up.railway.app](https://web-production-b3f76b45.up.railway.app)
 
----
+**NEAR Hackathon 2026 · Track: Social Money** (shared budgets, reputation-based access)
 
-## The problem
+## Why we built it
 
-Student societies (tech societies, cultural societies, sports clubs) handle real money: membership fees, event tickets and sponsorship. In most societies:
+A typical student society runs on membership fees and event money, kept by one treasurer, often in a personal account. Members can't see the spending, receipts go missing, and when the committee changes each year the records usually go with the old one.
 
-- One treasurer controls all the money, often through a personal bank account or cash.
-- Members can't see where their money goes.
-- Receipts get lost and reimbursements are slow.
-- When a new committee is elected each year, the handover is messy and records disappear.
+We wanted three things that a spreadsheet can't give:
+- **Nobody spends alone.** Every request needs approval from other people, whatever the amount.
+- **Members have a say.** Students who paid their fee get a vote, not just a view.
+- **Anyone can check.** The record lives somewhere no single person controls.
 
-## The solution
+Money itself stays off-chain: students pay by cash, card or bank transfer as they do today. NEAR holds the record, not the funds.
 
-Society Treasury is a transparent record-keeping and voting app for student societies.
+## What's on NEAR
 
-- **Money stays off-chain.** Students pay their fee the normal way (cash, card or bank transfer). No crypto payments are needed.
-- **Records live on NEAR.** Memberships, votes and spending records are stored on the NEAR blockchain, so they can't be edited, deleted or faked.
-- **Spending needs approval.** Every expense must be voted on by the committee before money is spent.
-- **Everything is visible.** Every member can see every request, every vote and every receipt.
-- **No wallet setup.** Students sign in with their email, and an embedded wallet is created for them automatically. No seed phrases, no crypto knowledge needed.
+One contract, [`society-treasury.testnet`](https://testnet.nearblocks.io/address/society-treasury.testnet), keeps the society's rules and history:
 
-**In one line:** treasurers issue digital membership passes when students pay their fees, committees vote on every expense, and every approved spend is logged with its receipt, so members can trust where their money goes.
+1. **Membership passes.** A numbered, non-transferable NFT is minted when the treasurer confirms a student's fee. It follows the NEP-171 view methods so wallets and explorers can show it, and `nft_transfer` always refuses.
+2. **Spending votes.** Each request is stored with every committee vote and every student vote. The contract decides the outcome itself, using the same rule as the app.
+3. **Receipts.** When a request is paid, the SHA-256 fingerprint of the receipt file is stored with it. Anyone holding the file can check that it's the one that was approved.
+4. **Roles and handover.** President, treasurer and committee roles live on the contract, so a new committee inherits the full history.
 
----
+Members never sign a transaction or pay gas. Each record is written by the society's contract account **on behalf of** the member who acted, and the contract checks that member's role before accepting it.
+
+## Check it yourself in a minute
+
+You only need Node 18 or newer. There are no keys, wallets or installs.
+
+```sh
+node scripts/check-chain.mjs
+```
+
+The script reads the live testnet contract directly over RPC:
+
+```
+Society Treasury on NEAR testnet: society-treasury.testnet
+  Computing Society (COMPSOC), term 2026/27
+  rules: pass with more than 70% of votes, at least 2 yes; student vote counts after 3 students vote
+  7 passes, 3 spending requests, €100.00 marked spent
+Committee roles
+  president  89c60e…0cb2
+  treasurer  5b9270…99bd
+  ...
+Membership passes (non-transferable NFTs)
+  #0001  89c60e…0cb2  2026/27  fee €0.00 by waived
+  #0002  fbc659…4467  2026/27  fee €15.00 by bank
+  ...
+Spending requests
+  REQ-0002  Snacks: €100.00, spent, 2 yes / 0 no, receipt sha256 4a17cb674adf…
+  ...
+Access keys on the contract account
+  function call only: issue_pass, set_role, handover, update_settings, create_request, vote, mark_spent, add_president, student_vote, set_student_quorum
+  full access (the owner’s key, which is not on the server)
+```
+
+In the app, the **On NEAR** page lists the same records. Each one links to its transaction on NearBlocks.
+
+## Deployment
+
+| | Where |
+|---|---|
+| App and API | [web-production-b3f76b45.up.railway.app](https://web-production-b3f76b45.up.railway.app) (Railway) |
+| Contract | [`society-treasury.testnet`](https://testnet.nearblocks.io/address/society-treasury.testnet) |
+| Health check | [`/api/health`](https://web-production-b3f76b45.up.railway.app/api/health): database status, plus NEAR jobs pending and failed |
 
 ## How it works
 
-1. **Setup:** the society president creates the society in the app and adds committee members.
-2. **Join:** a student pays the membership fee normally (cash, card or bank transfer).
-3. **Issue pass:** the treasurer confirms the payment in the app, and the student receives a **membership NFT pass**.
-4. **Request:** a committee member creates a spending request, for example "€40 pizza for Hack Night".
-5. **Vote:** the committee votes on every request, whatever the amount, and students vote too. Once enough students have voted (the student quorum, 3 by default), their majority counts as **one committee vote**. A request needs a majority of these votes and at least two approvals.
-6. **Spend:** if approved, the treasurer pays from the society's normal bank account.
-7. **Proof:** the treasurer uploads the receipt and marks the request as **Spent**.
-8. **Transparency:** every step is recorded on NEAR and visible to all members.
+```
+ Member (email sign-in, Privy) ──► Next.js API on Railway ──► Postgres: the record + a chain job, in one transaction
+                                                                   │
+                                        chain worker (oldest job first, retried) ──► society-treasury.testnet
+                                        signs with a function-call key,              on_behalf_of = the member
+                                        so the society pays the gas
+```
 
-### Request statuses
+### A member's journey
 
-| Status | Meaning |
+1. **Sign in** with an email code. Privy creates a NEAR wallet in the background. There's no seed phrase or browser extension.
+2. **Send proof of the fee:** a photo or PDF of the payment. The student sees that it's under review.
+3. **Get a pass.** The treasurer confirms the payment, and pass #000N is minted to the student's NEAR account.
+4. **Request money.** A committee member opens a request, such as "€30 pizza for new students".
+5. **Vote.** The committee votes, and so do the students. Once enough students have voted, their majority counts as one committee vote.
+6. **Spend and prove it.** The treasurer pays, uploads the receipt, and the request becomes Spent. The receipt's fingerprint goes on-chain.
+
+### The voting rule
+
+The same rule runs in [`src/lib/rules.ts`](src/lib/rules.ts) and in the contract:
+
+- **Seats:** every committee member except the person asking, plus **one seat for the students**. The student seat counts only once the society has at least as many students as the quorum (3 by default).
+- **Yes votes needed:** more than the society's approval share of the seats (set by the president, 50 to 90%), and never fewer than 2.
+- **The student seat** votes with the students' majority once enough of them have voted. A tie doesn't count.
+- **Approved** when the yes votes reach that number. **Rejected** as soon as approval is no longer possible.
+- A request can only be opened when at least 2 seats can vote, so no one can approve spending alone.
+
+### Gas sponsorship and the chain outbox
+
+- The API saves each action and a `chain_jobs` row in the same database transaction, so a record never exists without its NEAR job.
+- A worker sends jobs strictly in order, so a vote never reaches the chain before its request. It runs right after each response, and every 30 seconds as a backstop.
+- Network errors are retried (up to 8 tries) without skipping ahead. If the contract rejects a call, the job is marked failed and shown as "Not recorded on NEAR".
+- A Postgres advisory lock lets only one server send at a time, even while a deploy swaps containers.
+- The server holds a **function-call key** that can call only the ten record-keeping methods listed above. It can't move funds, add keys or redeploy the contract.
+- The contract accepts `on_behalf_of` only from its own account, then checks that member's role as if they'd signed. Every change also logs an `EVENT_JSON` line, so indexers can read it.
+
+### Roles
+
+| Role | Can do |
 |---|---|
-| Pending | Waiting for committee votes |
-| Approved – awaiting receipt | Approved, but the receipt is not uploaded yet |
-| Spent | Paid, with the receipt uploaded |
-| Rejected | Voted down by the committee |
+| President | Assign the treasurer and committee, set the approval share and student quorum, hand over to the next president, create requests and vote |
+| Treasurer | Review fee proofs and issue passes, upload receipts and mark requests Spent, create requests and vote |
+| Committee | Create spending requests and vote |
+| Student | See their pass and every request, vote and receipt; vote in the student vote; check in at events |
 
----
+Nobody can vote on their own request, and there are no routes to edit or delete votes, receipts or the activity log.
 
-## Roles and permissions
+## Run it locally
 
-### President (admin)
-- Add or remove committee members
-- Set the rules: the share of votes needed to pass
-- Hand over control to the next committee
-- Create spending requests and vote
+### Against the live backend (no setup)
 
-### Treasurer
-- Confirm student fee payments and issue membership passes
-- Upload receipts and mark requests as Spent
-- Create spending requests and vote
+This is the fastest way to work on the frontend. Clone the repo, then:
 
-### Committee members (Secretary, Events Officer, etc.)
-- Create spending requests
-- Vote on requests
-
-### Students (members)
-- Can view their membership pass
-- Can view all spending requests, votes and receipts
-- Can view totals: collected, spent and balance
-- Can check in at events with their pass
-- Can vote on spending requests in the **student vote**: once enough students have voted, their majority counts as one committee vote
-- Cannot create requests, issue passes or edit anything
-
-### Rules for everyone
-- Nobody can vote on their own request
-- Nobody can approve spending alone
-- Nobody can edit or delete past votes or records
-
----
-
-## Pages
-
-| Page | Who sees it | What it shows |
-|---|---|---|
-| Login | Everyone | Email sign-in (embedded wallet created automatically) |
-| Member home | Members | Membership pass, plus collected / spent / balance totals |
-| Spending log | Members | All requests with colour-coded statuses |
-| Request detail | Members | Amount, reason, who voted, receipt photo |
-| Committee dashboard | Committee | Payments to confirm, requests needing a vote, new request button |
-| Settings | President | Committee list, voting rules, handover |
-
----
-
-## Why NEAR?
-
-- **Tamper-proof records:** votes and spending history can't be changed after the fact.
-- **No single point of control:** no one treasurer can secretly change the records.
-- **Easy handover:** the full history stays when the committee changes each year.
-- **Student-friendly:** an embedded wallet and email login mean students never deal with crypto directly.
-
-### The contract
-
-Deployed on testnet at [`society-treasury.testnet`](https://testnet.nearblocks.io/address/society-treasury.testnet). It stores membership passes (non-transferable NFTs), committee roles, voting rules, and every spending request with its votes and receipt hash, and enforces the same rules as the app. Source, methods, and build and deploy steps are in [`contract/`](contract/README.md).
-
-**Members never pay gas.** The backend records every pass, role change, settings change, request, vote and receipt on the contract *on behalf of* the member who acted, signing with a function-call key on the contract account. The contract account pays the fees, and the contract still checks every rule against that member. Each action is queued in the database in the same transaction as the record (the `chain_jobs` table), then sent to NEAR in order; network errors are retried every 30 seconds. The app links each record to its NEAR transaction, and `/api/health` shows how many are pending or failed.
-
-The backend key can only call the contract's seven record-keeping methods, with a 5 NEAR gas allowance. It can't move funds, add keys or redeploy the contract. To top up the allowance, add a new function-call key and swap `NEAR_RECORDER_PRIVATE_KEY` on Railway.
-
----
-
-## Tech stack
-
-- **Frontend:** [Next.js](https://nextjs.org/) (App Router) + TypeScript
-- **Styling:** Tailwind CSS
-- **Blockchain:** NEAR Protocol (testnet)
-- **Smart contract:** society, membership, request and voting logic
-- **Wallet:** embedded wallet with email login
-- **Receipts:** images stored off-chain; only a link/reference is stored on NEAR
-
----
-
-## Features
-
-### MVP (hackathon scope)
-- [x] Email login with embedded wallet
-- [x] Create a society and add committee members
-- [ ] Treasurer confirms payment and issues membership NFT pass
-- [x] Create spending requests
-- [x] Committee voting (majority, no self-voting)
-- [x] Every request goes to a committee vote (at least two approvals)
-- [x] Upload receipt and mark as Spent
-- [x] Public spending log and totals
-
-### Future ideas
-- [ ] Separate budgets per event
-- [ ] One-click committee handover
-- [ ] Event check-in by scanning the membership pass
-- [ ] Optional neutral referee (e.g. Students' Union) for disputes
-- [ ] Support for multiple societies per college
-
----
-
-## Getting started
-
-### Prerequisites
-- Node.js 22.18 or newer
-- npm
-- Git
-- A [Privy](https://dashboard.privy.io) app with **email** login enabled
-- A Postgres database (we use Railway's)
-
-### Run locally against the live backend (no .env.local)
-
-The quickest way to work on the frontend. There are no keys to set up: the app uses the database, sign-in and NEAR contract that are already deployed on Railway.
-
-```bash
-git clone https://github.com/suzybabe/society-treasury.git
-cd society-treasury
+```sh
 npm install
 npm run dev
 ```
 
-Then open [http://localhost:3000](http://localhost:3000) and sign in with your email. With no `.env.local`, the dev server sends every `/api` call to https://web-production-b3f76b45.up.railway.app (set `REMOTE_API_URL` to use another backend). Anything you do is real: it lands in the shared database and on NEAR testnet.
+Open [localhost:3000](http://localhost:3000) and sign in with your email. Without a `.env.local`, the dev server forwards every `/api` call to the deployed app (set `REMOTE_API_URL` to use another backend). Everything you do is real: it goes into the shared database and onto NEAR testnet.
 
-### Run locally with your own database
+### With your own database
 
-```bash
-git clone https://github.com/suzybabe/society-treasury.git
-cd society-treasury
+```sh
 npm install
-cp .env.example .env.local   # then fill in the values (see below)
-npm run db:migrate           # creates the tables
+cp .env.example .env.local   # fill in the values below
+npm run db:migrate
 npm run dev
 ```
-
-Then open [http://localhost:3000](http://localhost:3000).
-
-### Environment variables
 
 | Variable | What it is |
 |---|---|
-| `NEXT_PUBLIC_PRIVY_APP_ID` | Privy app ID (Privy dashboard → Settings → Basics) |
-| `NEXT_PUBLIC_PRIVY_CLIENT_ID` | Optional Privy app client ID |
-| `PRIVY_APP_SECRET` | Privy app secret. Server-side only, keep it secret |
+| `NEXT_PUBLIC_PRIVY_APP_ID`, `PRIVY_APP_SECRET` | Privy app with email login enabled |
 | `DATABASE_URL` | Postgres connection string |
-| `BOOTSTRAP_PRESIDENT_EMAIL` | The first person to sign up with this email becomes president |
+| `BOOTSTRAP_PRESIDENT_EMAIL` | Comma-separated emails that become president when they sign up |
+| `SOCIETY_NAME`, `SOCIETY_SHORT_NAME`, `SOCIETY_TERM` | The society shown in the app |
+| `NEAR_NETWORK`, `NEAR_CONTRACT_ID`, `NEXT_PUBLIC_NEAR_CONTRACT_ID`, `NEAR_RPC_URL` | Which network and contract to use |
+| `NEAR_RECORDER_PRIVATE_KEY` | The function-call key that pays gas. Leave it empty and nothing is sent to NEAR |
 
-`.env.local` is git-ignored. Never commit real keys.
+`.env.local` is git-ignored, so real keys never get committed.
 
-### How sign-in works
+After changing the schema in `src/server/db/schema.ts`, run `npm run db:generate` to write a migration, then `npm run db:migrate`.
 
-1. A student enters their email and the 6-digit code Privy sends them. The same flow signs up new users.
-2. The app creates a **NEAR embedded wallet** for them through Privy (an implicit NEAR account), then registers them with the API.
-3. They enter their name, then wait for the treasurer to confirm they've paid. The page opens the treasury automatically once their pass is issued.
-4. The person whose email matches `BOOTSTRAP_PRESIDENT_EMAIL` skips the wait and becomes president. They then assign the treasurer and committee in Settings.
+## Build and test the contract
 
-### Database
+You need Rust (the toolchain is pinned in `contract/rust-toolchain.toml`) and [cargo-near](https://github.com/near/cargo-near).
 
-The schema lives in `src/server/db/schema.ts` (Drizzle ORM). After changing it:
-
-```bash
-npm run db:generate   # writes a new SQL migration to ./drizzle
-npm run db:migrate    # applies it
+```sh
+cd contract
+cargo test                                         # 25 unit tests
+cargo near build non-reproducible-wasm --no-abi
 ```
 
-Records are append-only: there are no API routes to edit or delete requests, votes, receipts or the activity log.
+Method signatures, deploy steps and the state migration are in [`contract/README.md`](contract/README.md).
 
-### Deploying to Railway
+## Deploying
 
-Infrastructure is defined in `.railway/railway.ts`: a `web` service (this Next.js app) and a `Postgres` database. Variables are managed in Railway, not in that file.
+The infrastructure is defined in [`.railway/railway.ts`](.railway/railway.ts): a `web` service for this app and a Postgres database. Each deploy runs `npm run db:migrate` first and waits for `/api/health`.
 
-```bash
-railway link                     # pick the society-treasury project
-railway config plan              # preview changes
-railway config apply             # create/update services
-railway variables --service web --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' \
-  --set NEXT_PUBLIC_PRIVY_APP_ID=... --set PRIVY_APP_SECRET=... --set BOOTSTRAP_PRESIDENT_EMAIL=...
-railway up --service web         # deploy (or connect the GitHub repo in the dashboard)
-railway domain --service web     # get a public URL
+```sh
+railway up --service web
 ```
 
-Each deploy runs `npm run db:migrate` first and checks `/api/health`. Add the public URL to your Privy app's **allowed origins**.
+Variables live in Railway, not in the repo. Add the app's public URL to the Privy app's allowed origins.
 
-> On Windows with an npm-installed Railway CLI, `railway config plan/apply` may fail with "requires Railway CLI 5.42.1 or newer". Run it from PowerShell with `$env:_ = "C:\Program Files\nodejs\node_modules\@railway\cli\bin\railway.exe"` set first.
-
----
-
-## Project structure
+## Project layout
 
 ```
-society-treasury/
-├── .railway/            # Railway infrastructure (railway.ts)
-├── drizzle/             # SQL migrations
-├── public/              # Static files (icons, images)
-├── scripts/migrate.mjs  # Applies migrations (run before each deploy)
-├── src/
-│   ├── app/             # Next.js routes (App Router)
-│   │   ├── api/         # Backend API: auth, members, requests, votes, receipts, events
-│   │   ├── login/       # Email sign-in and sign-up
-│   │   └── (app)/       # Signed-in pages: home, spending, spending/[id], committee, settings
-│   ├── server/          # Server-only code: database, Privy verification, permissions
-│   ├── views/           # Page content for each route
-│   ├── components/      # App shell, membership pass, theme toggle, shared UI
-│   ├── state/           # Session (Privy + NEAR wallet) and data store (API)
-│   └── lib/             # Shared types, voting rules, formatting
-├── package.json
-├── tsconfig.json
-└── README.md
+contract/            Rust contract (near-sdk 5) and its tests
+drizzle/             SQL migrations
+scripts/             migrate.mjs (runs on deploy), check-chain.mjs (reads the live contract)
+src/app/(app)/       Signed-in pages: home, spending, members, committee, settings, On NEAR
+src/app/api/         API routes: sign-up, fee proofs, members, requests, votes, student votes, receipts, events
+src/server/          Database, Privy token checks, permissions, NEAR calls and the chain worker
+src/lib/rules.ts     The voting rule, shared with the contract
+src/views/           Page content
+src/components/      App shell, membership pass, chain chips, shared UI
 ```
 
----
+**Stack:** Next.js 16 (App Router), TypeScript, Tailwind CSS v4, Motion, SWR, Drizzle ORM, Postgres, Privy (email login and NEAR embedded wallets), near-api-js, Rust with near-sdk, Railway.
 
-## Hackathon
+## Built during the hackathon
 
-- **Event:** NEAR HACKATHON 2026
-- **Track:** Social Money (shared budgets, programmable rewards, reputation-based access)
-- **Builder:** Susan Ogozi, BSc Computing Science, Griffith College Dublin
+Everything in this repo was written during NEAR Hackathon 2026 (first commit on 10 November 2026): the app, the API and database, the contract and its tests, the gas-sponsored chain worker, and the scripts.
+
+## Team
+
+Built by Susan Ogozi (BSc Computing Science) and team, in the Department of Computer Science at Griffith College Dublin.
